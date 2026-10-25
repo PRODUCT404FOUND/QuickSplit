@@ -1695,20 +1695,40 @@
     // Generate Client-Side square QR for the sync link
     renderQrCode('privacy-sync-qr-container', 'privacy-sync-qr-img', syncLink, 210);
 
-    // Wire up copy link button
-    document.getElementById('btn-copy-private-link').onclick = () => {
-      navigator.clipboard.writeText(syncLink).then(() => {
-        showToast('🔗 Private team link copied! Share only with your group members.', 'success');
-      }).catch(() => {
-        // Fallback
+    // Wire up copy link button — shortens via is.gd first, falls back to full URL
+    const copyBtn = document.getElementById('btn-copy-private-link');
+    copyBtn.onclick = async () => {
+      const originalHTML = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<span>⏳ Shortening…</span>';
+      copyBtn.disabled = true;
+
+      let linkToCopy = syncLink;
+      try {
+        const res = await fetch(
+          `https://is.gd/create.php?format=simple&url=${encodeURIComponent(syncLink)}`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (res.ok) {
+          const short = (await res.text()).trim();
+          if (short.startsWith('http')) linkToCopy = short;
+        }
+      } catch (_) { /* fall through to full URL */ }
+
+      copyBtn.innerHTML = originalHTML;
+      copyBtn.disabled = false;
+
+      try {
+        await navigator.clipboard.writeText(linkToCopy);
+        showToast(`🔗 Short link copied: ${linkToCopy}`, 'success');
+      } catch (_) {
         const ta = document.createElement('textarea');
-        ta.value = syncLink;
+        ta.value = linkToCopy;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
         showToast('🔗 Link copied! Share with your group.', 'success');
-      });
+      }
     };
 
     // Wire up encrypted backup button

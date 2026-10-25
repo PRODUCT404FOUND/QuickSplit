@@ -402,6 +402,8 @@
                   e.payers = [{ memberId: pId, amount: Number(e.amount) || 0 }];
                 }
               }
+            });
+
             // Self-healing: ensure secret key exists and decrypt any members with encUpiId
             if (!g.secretKey) {
               g.secretKey = generateSecretKey();

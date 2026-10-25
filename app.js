@@ -1983,6 +1983,11 @@
     }
   }
 
+  function closeAllModals() {
+    document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.add('hidden'));
+    document.body.style.overflow = '';
+  }
+
   function closeAllDropdowns() {
     const menu = document.getElementById('group-dropdown-menu');
     if (menu) menu.classList.add('hidden');

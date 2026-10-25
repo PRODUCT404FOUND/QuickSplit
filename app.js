@@ -1695,31 +1695,48 @@
     // Generate Client-Side square QR for the sync link
     renderQrCode('privacy-sync-qr-container', 'privacy-sync-qr-img', syncLink, 210);
 
-    // Wire up copy link button — shortens via is.gd first, falls back to full URL
+    // Wire up copy link button — shortens via is.gd / TinyURL, falls back to full URL
     const copyBtn = document.getElementById('btn-copy-private-link');
     copyBtn.onclick = async () => {
       const originalHTML = copyBtn.innerHTML;
       copyBtn.innerHTML = '<span>⏳ Shortening…</span>';
       copyBtn.disabled = true;
 
-      let linkToCopy = syncLink;
-      try {
-        const res = await fetch(
-          `https://is.gd/create.php?format=simple&url=${encodeURIComponent(syncLink)}`,
-          { signal: AbortSignal.timeout(4000) }
-        );
-        if (res.ok) {
-          const short = (await res.text()).trim();
-          if (short.startsWith('http')) linkToCopy = short;
+      // Helper: fetch with a manual timeout (AbortSignal.timeout not in all browsers)
+      async function fetchWithTimeout(url, ms) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), ms);
+        try {
+          const res = await fetch(url, { signal: ctrl.signal });
+          clearTimeout(t);
+          return res;
+        } catch (e) {
+          clearTimeout(t);
+          throw e;
         }
-      } catch (_) { /* fall through to full URL */ }
+      }
+
+      let linkToCopy = syncLink;
+      // Try is.gd first, then TinyURL
+      const shorteners = [
+        `https://is.gd/create.php?format=simple&url=${encodeURIComponent(syncLink)}`,
+        `https://tinyurl.com/api-create.php?url=${encodeURIComponent(syncLink)}`
+      ];
+      for (const apiUrl of shorteners) {
+        try {
+          const res = await fetchWithTimeout(apiUrl, 5000);
+          if (res.ok) {
+            const text = (await res.text()).trim();
+            if (text.startsWith('http')) { linkToCopy = text; break; }
+          }
+        } catch (_) { /* try next */ }
+      }
 
       copyBtn.innerHTML = originalHTML;
       copyBtn.disabled = false;
 
       try {
         await navigator.clipboard.writeText(linkToCopy);
-        showToast(`🔗 Short link copied: ${linkToCopy}`, 'success');
       } catch (_) {
         const ta = document.createElement('textarea');
         ta.value = linkToCopy;
@@ -1727,8 +1744,12 @@
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('🔗 Link copied! Share with your group.', 'success');
       }
+      const isShort = linkToCopy !== syncLink;
+      showToast(
+        isShort ? `🔗 Short link copied: ${linkToCopy}` : '🔗 Link copied! Share with your group.',
+        'success'
+      );
     };
 
     // Wire up encrypted backup button

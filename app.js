@@ -7,7 +7,7 @@
  * - Multi-payer bills (e.g., You: ₹500, Friend 1: ₹300, Friend 2: ₹400 = Total ₹1200)
  * - Precise Greedy Min-Cash-Flow settlement solver ("Who pays whom how much")
  * - UPI quick pay (GPay / PhonePe / Paytm / BHIM)
- * - 1-Click WhatsApp Hisab generator
+ * - 1-Click WhatsApp Split generator
  * - Cleared settlement audit trail
  * - LocalStorage sync
  */
@@ -123,7 +123,7 @@
   }
 
   // =========================================================================
-  // EXACT HISAB & DEBT SIMPLIFICATION ALGORITHM
+  // EXACT SPLIT & DEBT SIMPLIFICATION ALGORITHM
   // Handles:
   // - Single Payer expenses
   // - Multiple Contributors/Payers on a single bill (e.g. Me: 500, F1: 300, F2: 400)
@@ -286,7 +286,7 @@
     document.getElementById('group-members-count').textContent = `${group.members.length} Friends`;
     document.getElementById('group-currency-badge').textContent = `Currency: ${currency}`;
     document.getElementById('group-display-title').textContent = group.name;
-    document.getElementById('group-display-desc').textContent = group.desc || 'Tracking shared spending and final hisab.';
+    document.getElementById('group-display-desc').textContent = group.desc || 'Tracking shared spending and split breakdown.';
 
     // Populate Groups Dropdown
     const groupsListDropdown = document.getElementById('groups-list-dropdown');
@@ -332,7 +332,7 @@
     document.getElementById('tab-expenses-badge').textContent = group.expenses.length;
 
     if (optimalTransfers.length === 0) {
-      document.getElementById('metric-pending-subtext').textContent = '🎉 Sabka hisab clear hai!';
+      document.getElementById('metric-pending-subtext').textContent = '🎉 All splits are settled!';
     } else {
       document.getElementById('metric-pending-subtext').textContent = 'Direct clearance required';
     }
@@ -603,7 +603,7 @@
 
           <!-- Who this member owes or receives from -->
           <div class="member-dues-section">
-            <span class="dues-section-title">Hisab for ${escapeHtml(member.name)}:</span>
+            <span class="dues-section-title">Split for ${escapeHtml(member.name)}:</span>
             <div class="dues-list">
               ${duesHtml}
             </div>
@@ -837,7 +837,7 @@
       name,
       type: 'College Project',
       currency: '₹',
-      desc: 'Shared project spending and hisab',
+      desc: 'Shared project spending and splits',
       members,
       expenses: [],
       settlements: [],
@@ -1387,7 +1387,7 @@
   }
 
   // =========================================================================
-  // WHATSAPP HISAB SHARING
+  // WHATSAPP SPLIT SHARING
   // =========================================================================
   function openShareModal() {
     const group = getActiveGroup();
@@ -1432,7 +1432,7 @@
   function copyWhatsAppToClipboard() {
     const text = document.getElementById('whatsapp-message-content').textContent;
     navigator.clipboard.writeText(text).then(() => {
-      showToast('Copied Hisab! Paste it in your WhatsApp group.', 'success');
+      showToast('Copied Split Summary! Paste it in your WhatsApp group.', 'success');
     }).catch(() => {
       showToast('Unable to copy automatically. Please select text manually.', 'error');
     });
@@ -1500,7 +1500,7 @@
   function renderQrCode(containerId, fallbackImgId, text, size) {
     const container = document.getElementById(containerId);
     const fallbackImg = fallbackImgId ? document.getElementById(fallbackImgId) : null;
-    const qrSize = size || 200;
+    const qrSize = size || 210;
 
     if (container) {
       container.innerHTML = '';
@@ -1510,10 +1510,30 @@
             text: text,
             width: qrSize,
             height: qrSize,
-            colorDark: '#0f172a',
+            colorDark: '#0a0f1d',
             colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.L
           });
+
+          // Ensure exactly one 1:1 square element (canvas or img) is visible to prevent dual horizontal warping
+          setTimeout(() => {
+            const canvas = container.querySelector('canvas');
+            const img = container.querySelector('img');
+            if (img && img.src && img.src.startsWith('data:image')) {
+              img.style.display = 'block';
+              img.style.width = `${qrSize}px`;
+              img.style.height = `${qrSize}px`;
+              img.style.aspectRatio = '1 / 1';
+              if (canvas) canvas.style.display = 'none';
+            } else if (canvas) {
+              canvas.style.display = 'block';
+              canvas.style.width = `${qrSize}px`;
+              canvas.style.height = `${qrSize}px`;
+              canvas.style.aspectRatio = '1 / 1';
+              if (img) img.style.display = 'none';
+            }
+          }, 40);
+
           container.classList.remove('hidden');
           if (fallbackImg) fallbackImg.classList.add('hidden');
           return;
@@ -1527,7 +1547,7 @@
       if (container) container.classList.add('hidden');
       fallbackImg.classList.remove('hidden');
       const encoded = encodeURIComponent(text);
-      fallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encoded}&bgcolor=ffffff&color=1a1a2e&margin=8&qzone=1`;
+      fallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encoded}&bgcolor=ffffff&color=0a0f1d&margin=10&qzone=1`;
       fallbackImg.onerror = () => {
         fallbackImg.src = `https://quickchart.io/qr?text=${encoded}&size=${qrSize}&margin=2`;
       };
@@ -1557,7 +1577,7 @@
     const upiString = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('QuickSplit Payment')}`;
 
     // Render client-side QR with fallback
-    renderQrCode('upi-qr-code-wrapper', 'upi-qr-image', upiString, 220);
+    renderQrCode('upi-qr-code-wrapper', 'upi-qr-image', upiString, 210);
   }
 
   function handleSaveInlineUpi() {
@@ -1598,11 +1618,11 @@
     document.getElementById('privacy-group-id').textContent = group.id.toUpperCase();
     document.getElementById('privacy-group-secret').textContent = group.secretKey;
 
-    // Generate the private sync link (contains full group data as base64 in URL hash)
+    // Generate the private sync link (contains ultra-compact group data in URL hash)
     const syncLink = buildGroupSyncLink(group);
 
-    // Generate Client-Side QR for the sync link
-    renderQrCode('privacy-sync-qr-container', 'privacy-sync-qr-img', syncLink, 200);
+    // Generate Client-Side square QR for the sync link
+    renderQrCode('privacy-sync-qr-container', 'privacy-sync-qr-img', syncLink, 210);
 
     // Wire up copy link button
     document.getElementById('btn-copy-private-link').onclick = () => {
@@ -1627,39 +1647,30 @@
   }
 
   function buildGroupSyncLink(group) {
-    // Encode the group as clean base64 JSON in the URL hash
-    // This way: no server needed — data is in the URL itself!
-    // Only people who receive this link can import the group
+    // Encode the group as ultra-compact JSON in URL hash for fast mobile scanning
     try {
-      const cleanGroup = {
-        id: group.id,
-        name: group.name,
-        category: group.category || 'Other',
-        currency: group.currency || 'INR',
-        description: group.description || '',
-        secretKey: group.secretKey || '',
-        members: (group.members || []).map(m => ({
-          id: m.id,
-          name: m.name,
-          upiId: m.upiId || '',
-          color: m.color || ''
-        })),
-        expenses: (group.expenses || []).map(e => ({
-          id: e.id,
-          description: e.description,
-          amount: Number(e.amount),
-          paidBy: e.paidBy,
-          splitBetween: e.splitBetween,
-          date: e.date,
-          category: e.category,
-          splitType: e.splitType || 'EQUAL',
-          splits: e.splits || null,
-          multiPayers: e.multiPayers || null
-        })),
-        settlements: group.settlements || []
+      const compact = {
+        _v: 2,
+        i: group.id,
+        n: group.name,
+        c: group.category || 'Other',
+        u: group.currency || 'INR',
+        d: group.description || '',
+        k: group.secretKey || '',
+        m: (group.members || []).map(m => [m.id, m.name, m.upiId || '']),
+        e: (group.expenses || []).map(e => [
+          e.id,
+          e.description,
+          Number(e.amount),
+          e.paidBy,
+          e.splitBetween || [],
+          e.date || '',
+          e.category || 'Other'
+        ]),
+        s: (group.settlements || []).map(s => [s.fromId, s.toId, Number(s.amount), s.date || ''])
       };
 
-      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(cleanGroup))));
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
       const baseUrl = window.location.href.split('#')[0];
       return `${baseUrl}#import=${payload}`;
     } catch (e) {
@@ -1675,7 +1686,43 @@
       if (!hash.startsWith('#import=')) return;
 
       const payload = hash.substring('#import='.length);
-      const groupData = JSON.parse(decodeURIComponent(escape(atob(payload))));
+      const rawData = JSON.parse(decodeURIComponent(escape(atob(payload))));
+
+      let groupData = rawData;
+      // Unpack compact format if _v === 2
+      if (rawData.i && rawData.m) {
+        groupData = {
+          id: rawData.i,
+          name: rawData.n,
+          category: rawData.c || 'Other',
+          currency: rawData.u || 'INR',
+          description: rawData.d || 'Shared project spending and splits',
+          secretKey: rawData.k || '',
+          members: rawData.m.map((m, idx) => ({
+            id: m[0],
+            name: m[1],
+            upiId: m[2] || '',
+            color: AVATAR_COLORS[idx % AVATAR_COLORS.length]
+          })),
+          expenses: (rawData.e || []).map(e => ({
+            id: e[0],
+            description: e[1],
+            amount: Number(e[2]) || 0,
+            paidBy: e[3],
+            splitBetween: e[4] || [],
+            date: e[5] || new Date().toISOString().split('T')[0],
+            category: e[6] || 'Other',
+            splitType: 'EQUAL',
+            createdAt: Date.now()
+          })),
+          settlements: (rawData.s || []).map(s => ({
+            fromId: s[0],
+            toId: s[1],
+            amount: Number(s[2]) || 0,
+            date: s[3] || new Date().toISOString().split('T')[0]
+          }))
+        };
+      }
 
       if (!groupData || !groupData.id || !groupData.name) return;
 
@@ -1765,13 +1812,13 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${group.name.replace(/\s+/g, '_')}_hisab.csv`;
+    a.download = `${group.name.replace(/\s+/g, '_')}_split_summary.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    showToast('Exported Hisab to CSV!', 'success');
+    showToast('Exported Split Summary to CSV!', 'success');
   }
 
   // =========================================================================

@@ -1496,14 +1496,54 @@
     openModal('modal-upi-qr');
   }
 
+  // --- Universal Client-Side & Resilient QR Code Generator ---
+  function renderQrCode(containerId, fallbackImgId, text, size) {
+    const container = document.getElementById(containerId);
+    const fallbackImg = fallbackImgId ? document.getElementById(fallbackImgId) : null;
+    const qrSize = size || 200;
+
+    if (container) {
+      container.innerHTML = '';
+      if (typeof QRCode !== 'undefined') {
+        try {
+          new QRCode(container, {
+            text: text,
+            width: qrSize,
+            height: qrSize,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.L
+          });
+          container.classList.remove('hidden');
+          if (fallbackImg) fallbackImg.classList.add('hidden');
+          return;
+        } catch (err) {
+          console.warn('QRCode JS rendering fallback:', err);
+        }
+      }
+    }
+
+    if (fallbackImg) {
+      if (container) container.classList.add('hidden');
+      fallbackImg.classList.remove('hidden');
+      const encoded = encodeURIComponent(text);
+      fallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encoded}&bgcolor=ffffff&color=1a1a2e&margin=8&qzone=1`;
+      fallbackImg.onerror = () => {
+        fallbackImg.src = `https://quickchart.io/qr?text=${encoded}&size=${qrSize}&margin=2`;
+      };
+    }
+  }
+
   function generateUpiQrCode(receiver, amount) {
+    const qrContainer = document.getElementById('upi-qr-code-wrapper');
     const qrImg = document.getElementById('upi-qr-image');
     const qrPlaceholder = document.getElementById('upi-qr-placeholder');
     const inlineEditor = document.getElementById('qr-inline-upi-editor');
 
     if (!receiver.upiId) {
       // No UPI ID: show editor
-      qrImg.classList.add('hidden');
+      if (qrContainer) qrContainer.classList.add('hidden');
+      if (qrImg) qrImg.classList.add('hidden');
       qrPlaceholder.classList.add('hidden');
       inlineEditor.classList.remove('hidden');
       document.getElementById('qr-inline-upi-input').value = '';
@@ -1512,19 +1552,12 @@
 
     inlineEditor.classList.add('hidden');
     qrPlaceholder.classList.add('hidden');
-    qrImg.classList.remove('hidden');
 
     // Build the UPI payment string (NPCI standard)
     const upiString = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('QuickSplit Payment')}`;
 
-    // Use free QR code API — no library needed!
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiString)}&bgcolor=ffffff&color=000000&margin=12&qzone=1`;
-
-    qrImg.src = qrUrl;
-    qrImg.onerror = () => {
-      // Fallback: try alternative QR API
-      qrImg.src = `https://quickchart.io/qr?text=${encodeURIComponent(upiString)}&size=240&margin=2`;
-    };
+    // Render client-side QR with fallback
+    renderQrCode('upi-qr-code-wrapper', 'upi-qr-image', upiString, 220);
   }
 
   function handleSaveInlineUpi() {
@@ -1568,13 +1601,8 @@
     // Generate the private sync link (contains full group data as base64 in URL hash)
     const syncLink = buildGroupSyncLink(group);
 
-    // Generate QR for the sync link
-    const syncQrImg = document.getElementById('privacy-sync-qr-img');
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(syncLink)}&bgcolor=ffffff&color=1a1a2e&margin=12&qzone=1`;
-    syncQrImg.src = qrUrl;
-    syncQrImg.onerror = () => {
-      syncQrImg.src = `https://quickchart.io/qr?text=${encodeURIComponent(syncLink)}&size=220&margin=2`;
-    };
+    // Generate Client-Side QR for the sync link
+    renderQrCode('privacy-sync-qr-container', 'privacy-sync-qr-img', syncLink, 200);
 
     // Wire up copy link button
     document.getElementById('btn-copy-private-link').onclick = () => {
@@ -1599,14 +1627,43 @@
   }
 
   function buildGroupSyncLink(group) {
-    // Encode the group as base64 JSON in the URL hash
+    // Encode the group as clean base64 JSON in the URL hash
     // This way: no server needed — data is in the URL itself!
     // Only people who receive this link can import the group
     try {
-      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(group))));
+      const cleanGroup = {
+        id: group.id,
+        name: group.name,
+        category: group.category || 'Other',
+        currency: group.currency || 'INR',
+        description: group.description || '',
+        secretKey: group.secretKey || '',
+        members: (group.members || []).map(m => ({
+          id: m.id,
+          name: m.name,
+          upiId: m.upiId || '',
+          color: m.color || ''
+        })),
+        expenses: (group.expenses || []).map(e => ({
+          id: e.id,
+          description: e.description,
+          amount: Number(e.amount),
+          paidBy: e.paidBy,
+          splitBetween: e.splitBetween,
+          date: e.date,
+          category: e.category,
+          splitType: e.splitType || 'EQUAL',
+          splits: e.splits || null,
+          multiPayers: e.multiPayers || null
+        })),
+        settlements: group.settlements || []
+      };
+
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(cleanGroup))));
       const baseUrl = window.location.href.split('#')[0];
       return `${baseUrl}#import=${payload}`;
     } catch (e) {
+      console.error('buildGroupSyncLink error:', e);
       return window.location.href;
     }
   }

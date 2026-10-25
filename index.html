@@ -789,7 +789,8 @@
         <!-- The Dynamic QR Code Box -->
         <div class="upi-qr-frame glass-panel">
           <div id="upi-qr-container" class="qr-canvas-wrapper">
-            <img id="upi-qr-image" alt="Dynamic UPI QR Code" class="upi-qr-img" src="">
+            <div id="upi-qr-code-wrapper" class="qr-code-render-target"></div>
+            <img id="upi-qr-image" alt="Dynamic UPI QR Code" class="upi-qr-img hidden" src="">
             <div id="upi-qr-placeholder" class="qr-placeholder hidden">
               <span>⚠️ Recipient has not added a UPI ID yet</span>
             </div>
@@ -870,8 +871,9 @@
           <h4>📲 Scan with Phone Camera to Import Group</h4>
           <p class="subtext">Have your teammate scan this QR code with their mobile camera to load this project on their
             phone:</p>
-          <div class="sync-qr-wrapper">
-            <img id="privacy-sync-qr-img" alt="Private Group Sync QR" class="sync-qr-img" src="">
+          <div class="sync-qr-wrapper" id="sync-qr-wrapper">
+            <div id="privacy-sync-qr-container" class="qr-code-render-target"></div>
+            <img id="privacy-sync-qr-img" alt="Private Group Sync QR" class="sync-qr-img hidden" src="">
           </div>
         </div>
 
@@ -894,6 +896,8 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- QR Code Generator Library (Offline, Zero-Tracker, Instant Client-Side) -->
+  <script src="qrcode.min.js"></script>
   <!-- JavaScript Application Logic -->
   <script src="app.js"></script>
 </body>

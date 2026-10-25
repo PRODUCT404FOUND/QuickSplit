@@ -1717,45 +1717,58 @@
     openModal('modal-group-privacy');
   }
 
+  // Category ↔ single-char code map (saves ~6 chars per expense)
+  const CAT_ENCODE = {
+    'Hardware':'H','Software':'S','Printing':'P','Food':'F',
+    'Groceries':'G','Rent':'R','Utilities':'U','Transport':'T','Other':'O'
+  };
+  const CAT_DECODE = {
+    'H':'Hardware','S':'Software','P':'Printing','F':'Food',
+    'G':'Groceries','R':'Rent','U':'Utilities','T':'Transport','O':'Other'
+  };
+
   function buildGroupSyncLink(group) {
-    // Encode the group as ultra-compact JSON in URL hash for fast mobile scanning
+    // v4: index-based ultra-compact encoding
+    // Member IDs replaced by array position (0,1,2...) — saves ~13 chars per reference
+    // Category as single char, expense IDs removed, settlement dates dropped
     try {
+      const members = group.members || [];
+      const midx = {}; // memberId -> array index
+      members.forEach((m, i) => { midx[m.id] = i; });
+      const gi = (id) => midx[id] !== undefined ? midx[id] : -1;
+
       const compact = {
-        _v: 3,
+        _v: 4,
         i: group.id,
         n: group.name,
-        c: group.category || 'Other',
-        u: group.currency || 'INR',
-        d: (group.description || '').substring(0, 60),
+        u: group.currency || '₹',
         k: group.secretKey || '',
-        m: (group.members || []).map(m => [m.id, m.name, m.upiId || '']),
-        // e[0]=id, e[1]=title, e[2]=amount,
-        // e[3]=payers as [[memberId,amount],...] for multi-payer OR string memberId for single,
-        // e[4]=splits as [memberId,...] (amounts recalculated equally on decode),
-        // e[5]=date, e[6]=category
+        // m: [name, upiId] — NO member IDs (use array position)
+        m: members.map(m => [m.name.substring(0, 16), m.upiId || '']),
+        // e: [title, amount, payerIdx_or_[[idx,amt]...], [splitIdx...], date, catChar]
         e: (group.expenses || []).map(e => {
-          // Payers: compact representation
-          let payersData;
+          let p;
           if (e.payers && e.payers.length > 1) {
-            payersData = e.payers.map(p => [p.memberId, Math.round(p.amount * 100) / 100]);
+            p = e.payers.map(x => [gi(x.memberId), Math.round(x.amount * 100) / 100]).filter(x => x[0] >= 0);
           } else if (e.payers && e.payers.length === 1) {
-            payersData = e.payers[0].memberId; // single string saves space
+            p = gi(e.payers[0].memberId);
           } else {
-            payersData = e.payerId || e.paidBy || '';
+            p = gi(e.payerId || e.paidBy || '');
           }
-          // Splits: just member IDs (amounts recalculated on decode)
-          const splitIds = (e.splits || []).map(s => s.memberId);
+          const si = (e.splits || []).map(s => gi(s.memberId)).filter(i => i >= 0);
           return [
-            e.id,
-            (e.title || e.description || '').substring(0, 40),
+            (e.title || e.description || '').substring(0, 25),
             Math.round(Number(e.amount) * 100) / 100,
-            payersData,
-            splitIds,
+            p,
+            si,
             e.date || '',
-            e.category || 'Other'
+            CAT_ENCODE[e.category] || 'O'
           ];
         }),
-        s: (group.settlements || []).map(s => [s.fromId, s.toId, Math.round(Number(s.amount) * 100) / 100, s.date || ''])
+        // s: [fromIdx, toIdx, amount] — dates dropped
+        s: (group.settlements || [])
+          .map(s => [gi(s.fromId), gi(s.toId), Math.round(Number(s.amount) * 100) / 100])
+          .filter(s => s[0] >= 0 && s[1] >= 0)
       };
 
       const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
@@ -1777,70 +1790,129 @@
       const rawData = JSON.parse(decodeURIComponent(escape(atob(payload))));
 
       let groupData = rawData;
-      // Unpack compact format (_v === 2 or _v === 3)
       if (rawData.i && rawData.m) {
-        const isV3 = rawData._v >= 3;
-        groupData = {
-          id: rawData.i,
-          name: rawData.n,
-          category: rawData.c || 'Other',
-          currency: rawData.u || 'INR',
-          description: rawData.d || 'Shared project spending and splits',
-          secretKey: rawData.k || '',
-          members: rawData.m.map((m, idx) => ({
-            id: m[0],
-            name: m[1],
-            upiId: m[2] || '',
+        const v = rawData._v || 2;
+
+        if (v >= 4) {
+          // ── v4: index-based format ──────────────────────────────────────────
+          // members: [name, upiId]  — IDs generated as m_{groupId}_{idx}
+          const members = rawData.m.map((m, idx) => ({
+            id: `m_${rawData.i}_${idx}`,
+            name: m[0],
+            upiId: m[1] || '',
             color: AVATAR_COLORS[idx % AVATAR_COLORS.length]
-          })),
-          expenses: (rawData.e || []).map(e => {
-            const totalAmt = Number(e[2]) || 0;
-            if (isV3) {
-              // v3: e[3] = string memberId (single payer) OR [[memberId,amount],...] (multi)
-              //     e[4] = [memberId,...] (split member IDs, recalculate amounts equally)
-              const rawPayers = e[3];
-              let payers;
-              if (Array.isArray(rawPayers)) {
-                // Multi-payer: [[memberId, amount], ...]
-                payers = rawPayers.map(p => ({ memberId: p[0], amount: Number(p[1]) || 0 }));
-              } else {
-                // Single payer: just a memberId string
-                payers = rawPayers ? [{ memberId: rawPayers, amount: totalAmt }] : [];
-              }
-              const splitIds = e[4] || [];
-              const perPerson = splitIds.length > 0 ? Math.round((totalAmt / splitIds.length) * 100) / 100 : 0;
-              const splits = splitIds.map(mId => ({ memberId: mId, amount: perPerson }));
-              return {
-                id: e[0],
-                title: e[1] || '',
-                amount: totalAmt,
-                payers,
-                splits,
-                date: e[5] || new Date().toISOString().split('T')[0],
-                category: e[6] || 'Other',
-                createdAt: Date.now()
-              };
+          }));
+          const mids = members.map(m => m.id); // index -> full id
+
+          const expenses = (rawData.e || []).map((e, eIdx) => {
+            const totalAmt = Number(e[1]) || 0;
+            const rawP = e[2]; // number (single) OR [[idx,amt],...] (multi)
+            const siArr = e[3] || []; // [splitIdx,...]
+
+            let payers;
+            if (Array.isArray(rawP)) {
+              payers = rawP
+                .map(x => ({ memberId: mids[x[0]], amount: Number(x[1]) || 0 }))
+                .filter(x => x.memberId);
+            } else if (typeof rawP === 'number' && rawP >= 0) {
+              payers = [{ memberId: mids[rawP], amount: totalAmt }];
             } else {
-              // v2 legacy: e[3]=paidBy memberId string, e[4]=splitBetween [memberIds]
-              return {
-                id: e[0],
-                title: e[1] || '',
-                amount: totalAmt,
-                paidBy: e[3],
-                splitBetween: e[4] || [],
-                date: e[5] || new Date().toISOString().split('T')[0],
-                category: e[6] || 'Other',
-                createdAt: Date.now()
-              };
+              payers = [];
             }
-          }),
-          settlements: (rawData.s || []).map(s => ({
-            fromId: s[0],
-            toId: s[1],
-            amount: Number(s[2]) || 0,
+
+            const perPerson = siArr.length > 0 ? Math.round((totalAmt / siArr.length) * 100) / 100 : 0;
+            const splits = siArr
+              .map(i => ({ memberId: mids[i], amount: perPerson }))
+              .filter(s => s.memberId);
+
+            return {
+              id: `exp_${rawData.i}_${eIdx}`,
+              title: e[0] || '',
+              amount: totalAmt,
+              payers,
+              splits,
+              date: e[4] || new Date().toISOString().split('T')[0],
+              category: CAT_DECODE[e[5]] || 'Other',
+              createdAt: Date.now()
+            };
+          });
+
+          const settlements = (rawData.s || [])
+            .map(s => ({
+              fromId: mids[s[0]],
+              toId: mids[s[1]],
+              amount: Number(s[2]) || 0,
+              date: new Date().toISOString().split('T')[0]
+            }))
+            .filter(s => s.fromId && s.toId);
+
+          groupData = {
+            id: rawData.i,
+            name: rawData.n,
+            category: 'Other',
+            currency: rawData.u || '₹',
+            description: 'Shared splits',
+            secretKey: rawData.k || '',
+            members, expenses, settlements
+          };
+
+        } else if (v === 3) {
+          // ── v3: member-ID strings ───────────────────────────────────────────
+          const members = rawData.m.map((m, idx) => ({
+            id: m[0], name: m[1], upiId: m[2] || '',
+            color: AVATAR_COLORS[idx % AVATAR_COLORS.length]
+          }));
+          const expenses = (rawData.e || []).map(e => {
+            const totalAmt = Number(e[2]) || 0;
+            const rawP = e[3];
+            let payers;
+            if (Array.isArray(rawP)) {
+              payers = rawP.map(p => ({ memberId: p[0], amount: Number(p[1]) || 0 }));
+            } else {
+              payers = rawP ? [{ memberId: rawP, amount: totalAmt }] : [];
+            }
+            const splitIds = e[4] || [];
+            const perPerson = splitIds.length > 0 ? Math.round((totalAmt / splitIds.length) * 100) / 100 : 0;
+            const splits = splitIds.map(mId => ({ memberId: mId, amount: perPerson }));
+            return {
+              id: e[0], title: e[1] || '', amount: totalAmt,
+              payers, splits,
+              date: e[5] || new Date().toISOString().split('T')[0],
+              category: e[6] || 'Other', createdAt: Date.now()
+            };
+          });
+          const settlements = (rawData.s || []).map(s => ({
+            fromId: s[0], toId: s[1], amount: Number(s[2]) || 0,
             date: s[3] || new Date().toISOString().split('T')[0]
-          }))
-        };
+          }));
+          groupData = {
+            id: rawData.i, name: rawData.n, category: rawData.c || 'Other',
+            currency: rawData.u || 'INR', description: rawData.d || '',
+            secretKey: rawData.k || '', members, expenses, settlements
+          };
+
+        } else {
+          // ── v2 legacy ────────────────────────────────────────────────────────
+          const members = rawData.m.map((m, idx) => ({
+            id: m[0], name: m[1], upiId: m[2] || '',
+            color: AVATAR_COLORS[idx % AVATAR_COLORS.length]
+          }));
+          const expenses = (rawData.e || []).map(e => ({
+            id: e[0], title: e[1] || '', amount: Number(e[2]) || 0,
+            paidBy: e[3], splitBetween: e[4] || [],
+            date: e[5] || new Date().toISOString().split('T')[0],
+            category: e[6] || 'Other', createdAt: Date.now()
+          }));
+          const settlements = (rawData.s || []).map(s => ({
+            fromId: s[0], toId: s[1], amount: Number(s[2]) || 0,
+            date: s[3] || new Date().toISOString().split('T')[0]
+          }));
+          groupData = {
+            id: rawData.i, name: rawData.n, category: rawData.c || 'Other',
+            currency: rawData.u || 'INR', description: rawData.d || '',
+            secretKey: rawData.k || '', members, expenses, settlements
+          };
+        }
       }
 
       if (!groupData || !groupData.id || !groupData.name) return;

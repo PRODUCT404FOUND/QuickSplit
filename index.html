@@ -790,6 +790,31 @@
           </div>
         </div>
 
+        <!-- Receiver UPI ID & Copy Card -->
+        <div id="qr-upi-id-card" class="upi-id-card glass-panel">
+          <div class="upi-id-left">
+            <span class="upi-id-sublabel">Receiver UPI ID</span>
+            <span id="qr-receiver-upi-text" class="upi-id-val">—</span>
+          </div>
+          <div class="upi-id-actions">
+            <button type="button" id="btn-copy-receiver-upi" class="glass-btn btn-sm copy-upi-btn" title="Copy UPI ID to Clipboard">
+              <span>📋 Copy UPI ID</span>
+            </button>
+            <button type="button" id="btn-edit-receiver-upi" class="glass-btn btn-sm" title="Edit UPI ID">
+              <span>✏️</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inline UPI ID Editor if not present or needs change -->
+        <div id="qr-inline-upi-editor" class="inline-upi-box glass-panel hidden">
+          <label for="qr-inline-upi-input">Enter Receiver's UPI ID to generate live QR:</label>
+          <div class="member-input-row" style="margin-top:0.4rem;">
+            <input type="text" id="qr-inline-upi-input" placeholder="e.g. rohan@okaxis or 9876543210@paytm">
+            <button type="button" id="btn-save-inline-upi" class="glow-primary-btn btn-sm">Save & Generate</button>
+          </div>
+        </div>
+
         <!-- The Dynamic QR Code Box -->
         <div class="upi-qr-frame glass-panel">
           <div id="upi-qr-container" class="qr-canvas-wrapper">
@@ -800,31 +825,53 @@
             </div>
           </div>
           <div class="qr-instruction-tag">
-            <span>📷 Scan with any Indian UPI App</span>
+            <span id="qr-instruction-text">📷 Scan with any Indian UPI App</span>
           </div>
         </div>
 
-        <!-- Inline UPI ID Editor if not present or needs change -->
-        <div id="qr-inline-upi-editor" class="inline-upi-box glass-panel hidden">
-          <label for="qr-inline-upi-input">Enter Receiver's UPI ID to generate live QR:</label>
-          <div class="member-input-row" style="margin-top:0.4rem;">
-            <input type="text" id="qr-inline-upi-input" placeholder="e.g. rohan@okaxis or 9876543210@paytm">
-            <button type="button" id="btn-save-inline-upi" class="glow-primary-btn btn-sm">Generate QR</button>
-          </div>
+        <!-- Option: Lock exact amount or Open QR -->
+        <div class="qr-amount-option-box glass-panel">
+          <label class="qr-checkbox-label">
+            <input type="checkbox" id="qr-toggle-include-amount">
+            <span class="qr-label-title">Lock fixed amount in QR</span>
+          </label>
+          <span class="qr-hint-text" id="qr-amount-hint">✨ Unlocked: Scan & enter amount freely in app (avoids bank rejection)</span>
         </div>
 
-        <div class="upi-supported-badges">
-          <span class="upi-app-pill">Google Pay</span>
-          <span class="upi-app-pill">PhonePe</span>
-          <span class="upi-app-pill">Paytm</span>
-          <span class="upi-app-pill">BHIM</span>
-          <span class="upi-app-pill">Cred</span>
+        <!-- Choose Payment App -->
+        <div class="upi-app-selector-section">
+          <div class="upi-app-selector-header">
+            <span>Pay directly in UPI App:</span>
+          </div>
+          <div class="upi-apps-grid">
+            <button type="button" class="upi-app-btn" data-upi-app="gpay">
+              <span class="app-icon">🔵</span>
+              <span class="app-label">Google Pay</span>
+            </button>
+            <button type="button" class="upi-app-btn" data-upi-app="phonepe">
+              <span class="app-icon">🟣</span>
+              <span class="app-label">PhonePe</span>
+            </button>
+            <button type="button" class="upi-app-btn" data-upi-app="paytm">
+              <span class="app-icon">🔷</span>
+              <span class="app-label">Paytm</span>
+            </button>
+            <button type="button" class="upi-app-btn" data-upi-app="bhim">
+              <span class="app-icon">🟠</span>
+              <span class="app-label">BHIM</span>
+            </button>
+            <button type="button" class="upi-app-btn" data-upi-app="cred">
+              <span class="app-icon">💳</span>
+              <span class="app-label">CRED</span>
+            </button>
+            <button type="button" class="upi-app-btn" data-upi-app="generic">
+              <span class="app-icon">⚡</span>
+              <span class="app-label">Other UPI</span>
+            </button>
+          </div>
         </div>
 
         <div class="upi-modal-actions-row">
-          <a id="qr-open-intent-btn" class="glass-btn btn-accent-glow flex-1" target="_blank" rel="noopener noreferrer">
-            <span>📱 Pay in UPI App</span>
-          </a>
           <button id="qr-mark-settled-btn" class="glow-primary-btn flex-1">
             <span>✅ Mark as Settled</span>
           </button>

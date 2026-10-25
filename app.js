@@ -1553,6 +1553,47 @@
   let _qrCurrentPayerId = null;
   let _qrCurrentReceiverId = null;
   let _qrCurrentAmount = 0;
+  let _qrLockAmount = false;
+
+  function copyToClipboardText(text, successToast = null) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        if (successToast) showToast(successToast, 'success');
+      }).catch(() => {
+        fallbackCopyText(text, successToast);
+      });
+    } else {
+      fallbackCopyText(text, successToast);
+    }
+  }
+
+  function fallbackCopyText(text, successToast = null) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      ta.setAttribute('readonly', '');
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (successToast) showToast(successToast, 'success');
+    } catch (_) {}
+  }
+
+  function updateQrAmountHintText(isLocked, amount, currency) {
+    const hint = document.getElementById('qr-amount-hint');
+    const instruction = document.getElementById('qr-instruction-text');
+    if (isLocked) {
+      if (hint) hint.innerHTML = `🔒 <strong>Amount locked in QR:</strong> ${formatMoney(amount, currency)}`;
+      if (instruction) instruction.textContent = `📷 Scan to Pay ${formatMoney(amount, currency)}`;
+    } else {
+      if (hint) hint.innerHTML = `✨ <strong>Unlocked:</strong> Scan & enter amount freely in app (avoids bank rejection)`;
+      if (instruction) instruction.textContent = `📷 Scan with any Indian UPI App`;
+    }
+  }
 
   function openUpiQrModal(payerId, receiverId, amount) {
     const group = getActiveGroup();
@@ -1561,6 +1602,7 @@
     _qrCurrentPayerId = payerId;
     _qrCurrentReceiverId = receiverId;
     _qrCurrentAmount = amount;
+    _qrLockAmount = false; // default: UNLOCKED (just the QR code not the fixed amount!)
 
     const payer = getMember(group, payerId);
     const receiver = getMember(group, receiverId);
@@ -1571,17 +1613,70 @@
     document.getElementById('qr-receiver-name').textContent = receiver.name;
     document.getElementById('qr-amount-display').textContent = formatMoney(amount, currency);
 
-    // Generate QR code
-    generateUpiQrCode(receiver, amount);
+    // Update Receiver UPI ID Card
+    const upiCard = document.getElementById('qr-upi-id-card');
+    const upiText = document.getElementById('qr-receiver-upi-text');
+    const inlineEditor = document.getElementById('qr-inline-upi-editor');
 
-    // Set deep-link button
-    const intentBtn = document.getElementById('qr-open-intent-btn');
-    const upiNote = encodeURIComponent(`QuickSplit payment from ${payer.name}`);
     if (receiver.upiId) {
-      intentBtn.href = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&am=${amount.toFixed(2)}&cu=INR&tn=${upiNote}`;
+      upiText.textContent = receiver.upiId;
+      if (upiCard) upiCard.classList.remove('hidden');
+      if (inlineEditor) inlineEditor.classList.add('hidden');
     } else {
-      intentBtn.href = `upi://pay?pn=${encodeURIComponent(receiver.name)}&am=${amount.toFixed(2)}&cu=INR&tn=${upiNote}`;
+      upiText.textContent = 'None added yet';
+      if (upiCard) upiCard.classList.add('hidden');
+      if (inlineEditor) inlineEditor.classList.remove('hidden');
+      document.getElementById('qr-inline-upi-input').value = '';
     }
+
+    // Copy Receiver UPI ID button
+    const copyUpiBtn = document.getElementById('btn-copy-receiver-upi');
+    if (copyUpiBtn) {
+      copyUpiBtn.onclick = () => {
+        if (!receiver.upiId) {
+          showToast('No UPI ID added for receiver yet.', 'warning');
+          return;
+        }
+        copyToClipboardText(receiver.upiId, `📋 UPI ID copied: ${receiver.upiId}`);
+      };
+    }
+
+    // Edit Receiver UPI ID button
+    const editUpiBtn = document.getElementById('btn-edit-receiver-upi');
+    if (editUpiBtn) {
+      editUpiBtn.onclick = () => {
+        if (inlineEditor) {
+          inlineEditor.classList.toggle('hidden');
+          if (!inlineEditor.classList.contains('hidden')) {
+            document.getElementById('qr-inline-upi-input').value = receiver.upiId || '';
+            document.getElementById('qr-inline-upi-input').focus();
+          }
+        }
+      };
+    }
+
+    // Amount lock toggle checkbox
+    const toggleAmount = document.getElementById('qr-toggle-include-amount');
+    if (toggleAmount) {
+      toggleAmount.checked = _qrLockAmount;
+      updateQrAmountHintText(_qrLockAmount, amount, currency);
+
+      toggleAmount.onchange = (e) => {
+        _qrLockAmount = e.target.checked;
+        updateQrAmountHintText(_qrLockAmount, _qrCurrentAmount, currency);
+        generateUpiQrCode(receiver, _qrCurrentAmount, _qrLockAmount);
+      };
+    }
+
+    // Generate QR code (unlocked / no fixed amount by default)
+    generateUpiQrCode(receiver, amount, _qrLockAmount);
+
+    // Wire up UPI App Selector buttons
+    document.querySelectorAll('.upi-app-btn').forEach(btn => {
+      btn.onclick = () => {
+        handleOpenSpecificUpiApp(btn.dataset.upiApp, payer, receiver, amount);
+      };
+    });
 
     // Mark as settled button
     document.getElementById('qr-mark-settled-btn').onclick = () => {
@@ -1590,6 +1685,57 @@
     };
 
     openModal('modal-upi-qr');
+  }
+
+  function handleOpenSpecificUpiApp(appKey, payer, receiver, amount) {
+    if (!receiver.upiId) {
+      showToast('⚠️ Please enter the receiver’s UPI ID first!', 'warning');
+      const inlineEditor = document.getElementById('qr-inline-upi-editor');
+      if (inlineEditor) inlineEditor.classList.remove('hidden');
+      return;
+    }
+
+    const note = encodeURIComponent(`QuickSplit payment from ${payer.name}`);
+    const amtStr = amount > 0 ? `&am=${amount.toFixed(2)}` : '';
+    const pa = encodeURIComponent(receiver.upiId);
+    const pn = encodeURIComponent(receiver.name);
+
+    // Always copy UPI ID to clipboard as a helpful fallback
+    copyToClipboardText(receiver.upiId);
+
+    let deepLink = '';
+    let appName = 'UPI App';
+
+    switch (appKey) {
+      case 'gpay':
+        appName = 'Google Pay';
+        deepLink = `tez://upi/pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+      case 'phonepe':
+        appName = 'PhonePe';
+        deepLink = `phonepe://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+      case 'paytm':
+        appName = 'Paytm';
+        deepLink = `paytmmp://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+      case 'bhim':
+        appName = 'BHIM';
+        deepLink = `bhim://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+      case 'cred':
+        appName = 'CRED';
+        deepLink = `cred://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+      case 'generic':
+      default:
+        appName = 'UPI App';
+        deepLink = `upi://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
+        break;
+    }
+
+    showToast(`📋 Copied UPI ID: ${receiver.upiId}! Opening ${appName}...`, 'success');
+    window.location.href = deepLink;
   }
 
   // --- Universal Client-Side & Resilient QR Code Generator ---
@@ -1650,7 +1796,7 @@
     }
   }
 
-  function generateUpiQrCode(receiver, amount) {
+  function generateUpiQrCode(receiver, amount, lockAmount = false) {
     const qrContainer = document.getElementById('upi-qr-code-wrapper');
     const qrImg = document.getElementById('upi-qr-image');
     const qrPlaceholder = document.getElementById('upi-qr-placeholder');
@@ -1660,17 +1806,20 @@
       // No UPI ID: show editor
       if (qrContainer) qrContainer.classList.add('hidden');
       if (qrImg) qrImg.classList.add('hidden');
-      qrPlaceholder.classList.add('hidden');
-      inlineEditor.classList.remove('hidden');
+      if (qrPlaceholder) qrPlaceholder.classList.remove('hidden');
+      if (inlineEditor) inlineEditor.classList.remove('hidden');
       document.getElementById('qr-inline-upi-input').value = '';
       return;
     }
 
-    inlineEditor.classList.add('hidden');
-    qrPlaceholder.classList.add('hidden');
+    if (qrPlaceholder) qrPlaceholder.classList.add('hidden');
 
-    // Build the UPI payment string (NPCI standard)
-    const upiString = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('QuickSplit Payment')}`;
+    // Build the UPI payment string:
+    // If lockAmount is false (default), omit &am= so it's "just the qr code not the fixed amount in it"
+    let upiString = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&cu=INR`;
+    if (lockAmount && amount > 0) {
+      upiString += `&am=${amount.toFixed(2)}&tn=${encodeURIComponent('QuickSplit Payment')}`;
+    }
 
     // Render client-side QR with fallback
     renderQrCode('upi-qr-code-wrapper', 'upi-qr-image', upiString, 210);
@@ -1690,7 +1839,16 @@
     if (member) {
       member.upiId = newUpi;
       saveState();
-      generateUpiQrCode(member, _qrCurrentAmount);
+
+      // Update UI elements in modal
+      const upiText = document.getElementById('qr-receiver-upi-text');
+      if (upiText) upiText.textContent = newUpi;
+      const upiCard = document.getElementById('qr-upi-id-card');
+      if (upiCard) upiCard.classList.remove('hidden');
+      const inlineEditor = document.getElementById('qr-inline-upi-editor');
+      if (inlineEditor) inlineEditor.classList.add('hidden');
+
+      generateUpiQrCode(member, _qrCurrentAmount, _qrLockAmount);
       renderAll();
       showToast(`UPI ID saved for ${member.name}!`, 'success');
     }

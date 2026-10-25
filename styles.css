@@ -2349,22 +2349,177 @@ button, input, select, textarea {
   color: var(--text-secondary);
 }
 
-.upi-supported-badges {
+/* UPI ID Copy Card in Modal */
+.upi-id-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-top: 0.25rem;
+}
+
+.upi-id-left {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+
+.upi-id-sublabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.upi-id-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent-emerald);
+  font-family: 'Fira Code', 'Roboto Mono', monospace;
+  word-break: break-all;
+}
+
+.upi-id-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.copy-upi-btn {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: var(--accent-emerald) !important;
+  font-weight: 700 !important;
+}
+
+.copy-upi-btn:hover {
+  background: rgba(16, 185, 129, 0.15) !important;
+}
+
+/* QR Amount Lock Toggle Option */
+.qr-amount-option-box {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.qr-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.qr-checkbox-label input[type="checkbox"] {
+  accent-color: var(--accent-emerald);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.qr-hint-text {
+  font-size: 0.74rem;
+  color: var(--accent-emerald);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* Interactive UPI App Selector */
+.upi-app-selector-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.upi-app-selector-header {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.upi-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.upi-app-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.6rem 0.4rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.upi-app-pill {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.2rem 0.6rem;
-  border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
+.upi-app-btn .app-icon {
+  font-size: 0.95rem;
+}
+
+.upi-app-btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-indigo);
+  transform: translateY(-1px);
+}
+
+.upi-app-btn:active {
+  transform: translateY(0);
+}
+
+.upi-app-btn[data-upi-app="gpay"]:hover {
+  border-color: #4285F4;
+  box-shadow: 0 0 10px rgba(66, 133, 244, 0.25);
+}
+
+.upi-app-btn[data-upi-app="phonepe"]:hover {
+  border-color: #5f259f;
+  box-shadow: 0 0 10px rgba(95, 37, 159, 0.25);
+}
+
+.upi-app-btn[data-upi-app="paytm"]:hover {
+  border-color: #00b9f5;
+  box-shadow: 0 0 10px rgba(0, 185, 245, 0.25);
+}
+
+.upi-app-btn[data-upi-app="cred"]:hover {
+  border-color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.upi-app-btn[data-upi-app="bhim"]:hover {
+  border-color: #f7941d;
+  box-shadow: 0 0 10px rgba(247, 148, 29, 0.25);
 }
 
 .upi-modal-actions-row {
@@ -2372,6 +2527,7 @@ button, input, select, textarea {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
+  margin-top: 0.25rem;
 }
 
 /* ================= Private Group Sync Modal Styles ================= */

@@ -87,6 +87,28 @@
               if (e.description) e.description = e.description.replace(/hisab/gi, 'split');
               if (e.notes) e.notes = e.notes.replace(/hisab/gi, 'split');
             });
+
+            // Self-healing: repair any expenses with empty or missing splits/payers
+            const memberIds = (g.members || []).map(m => m.id);
+            (g.expenses || []).forEach(e => {
+              // 1. Repair splits if empty or missing
+              if (!e.splits || e.splits.length === 0) {
+                if (e.splitBetween && e.splitBetween.length > 0) {
+                  const perPerson = Math.round(((Number(e.amount) || 0) / e.splitBetween.length) * 100) / 100;
+                  e.splits = e.splitBetween.map(mId => ({ memberId: mId, amount: perPerson }));
+                } else if (memberIds.length > 0) {
+                  const perPerson = Math.round(((Number(e.amount) || 0) / memberIds.length) * 100) / 100;
+                  e.splits = memberIds.map(mId => ({ memberId: mId, amount: perPerson }));
+                }
+              }
+              // 2. Repair payers if empty or missing
+              if (!e.payers || e.payers.length === 0) {
+                const pId = e.payerId || e.paidBy || (memberIds[0] || '');
+                if (pId) {
+                  e.payers = [{ memberId: pId, amount: Number(e.amount) || 0 }];
+                }
+              }
+            });
           });
           return;
         }
@@ -174,21 +196,22 @@
         }
       }
 
-      // Individual shares owed (supports splits array and splitBetween member IDs)
-      if (exp.splits && exp.splits.length > 0) {
-        exp.splits.forEach(s => {
+      // Individual shares owed (supports splits array, splitBetween, and all-member fallback)
+      let activeSplits = (exp.splits && exp.splits.length > 0) ? exp.splits : null;
+      if (!activeSplits && exp.splitBetween && exp.splitBetween.length > 0) {
+        const perPerson = Math.round(((Number(exp.amount) || 0) / exp.splitBetween.length) * 100) / 100;
+        activeSplits = exp.splitBetween.map(mId => ({ memberId: mId, amount: perPerson }));
+      }
+      if (!activeSplits && group.members && group.members.length > 0) {
+        const perPerson = Math.round(((Number(exp.amount) || 0) / group.members.length) * 100) / 100;
+        activeSplits = group.members.map(m => ({ memberId: m.id, amount: perPerson }));
+      }
+      if (activeSplits) {
+        activeSplits.forEach(s => {
           const sAmt = Number(s.amount) || 0;
           if (shareTotal[s.memberId] !== undefined) {
             shareTotal[s.memberId] += sAmt;
             net[s.memberId] -= sAmt;
-          }
-        });
-      } else if (exp.splitBetween && exp.splitBetween.length > 0) {
-        const perPerson = Math.round(((Number(exp.amount) || 0) / exp.splitBetween.length) * 100) / 100;
-        exp.splitBetween.forEach(mId => {
-          if (shareTotal[mId] !== undefined) {
-            shareTotal[mId] += perPerson;
-            net[mId] -= perPerson;
           }
         });
       }
@@ -499,7 +522,9 @@
         payerText = `Paid by ${m.name}`;
       }
 
-      const splitCount = (exp.splits || []).length;
+      const splitCount = (exp.splits && exp.splits.length > 0)
+        ? exp.splits.length
+        : (exp.splitBetween && exp.splitBetween.length > 0 ? exp.splitBetween.length : group.members.length);
 
       card.innerHTML = `
         <div class="expense-left">
@@ -1852,7 +1877,8 @@
           const expenses = (rawData.e || []).map((e, eIdx) => {
             const totalAmt = Number(e[1]) || 0;
             const rawP = e[2]; // number (single) OR [[idx,amt],...] (multi)
-            const siArr = e[3] || []; // [splitIdx,...]
+            // If siArr is empty or missing, fallback to splitting equally across all members
+            const siArr = (e[3] && e[3].length > 0) ? e[3] : mids.map((_, i) => i);
 
             let payers;
             if (Array.isArray(rawP)) {
@@ -1860,9 +1886,9 @@
                 .map(x => ({ memberId: mids[x[0]], amount: Number(x[1]) || 0 }))
                 .filter(x => x.memberId);
             } else if (typeof rawP === 'number' && rawP >= 0) {
-              payers = [{ memberId: mids[rawP], amount: totalAmt }];
+              payers = [{ memberId: mids[rawP] || mids[0], amount: totalAmt }];
             } else {
-              payers = [];
+              payers = [{ memberId: mids[0], amount: totalAmt }];
             }
 
             const perPerson = siArr.length > 0 ? Math.round((totalAmt / siArr.length) * 100) / 100 : 0;
@@ -1963,32 +1989,29 @@
       if (!groupData || !groupData.id || !groupData.name) return;
 
       // Check if this group already exists locally
-      const exists = state.groups.find(g => g.id === groupData.id);
-      if (exists) {
-        showToast(`Group "${groupData.name}" is already loaded!`, 'info');
-        state.activeGroupId = exists.id;
+      const existsIdx = state.groups.findIndex(g => g.id === groupData.id);
+      if (existsIdx !== -1) {
+        // Group exists — seamlessly update with latest shared team data
+        state.groups[existsIdx] = {
+          ...state.groups[existsIdx],
+          members: groupData.members,
+          expenses: groupData.expenses,
+          settlements: groupData.settlements
+        };
+        state.activeGroupId = groupData.id;
         saveState();
         renderAll();
-        // Clean URL
+        showToast(`✅ "${groupData.name}" updated with latest team data!`, 'success');
         history.replaceState(null, '', window.location.pathname);
         return;
       }
 
-      // Ask user to confirm import
-      const confirmed = confirm(
-        `📲 Import Group: "${groupData.name}"?\n\n` +
-        `Members: ${groupData.members.map(m => m.name).join(', ')}\n` +
-        `Expenses logged: ${groupData.expenses.length}\n\n` +
-        `This group was shared with you by a teammate. Import it to your QuickSplit?`
-      );
-
-      if (confirmed) {
-        state.groups.unshift(groupData);
-        state.activeGroupId = groupData.id;
-        saveState();
-        renderAll();
-        showToast(`✅ Imported "${groupData.name}" successfully!`, 'success');
-      }
+      // New group: import directly without blocking alert dialogs
+      state.groups.unshift(groupData);
+      state.activeGroupId = groupData.id;
+      saveState();
+      renderAll();
+      showToast(`✅ Imported "${groupData.name}" (${groupData.expenses.length} bills, ${groupData.members.length} friends)!`, 'success');
 
       // Clean the hash from URL regardless
       history.replaceState(null, '', window.location.pathname);

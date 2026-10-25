@@ -77,6 +77,17 @@
           state.groups = parsed.groups || [];
           state.activeGroupId = parsed.activeGroupId || (state.groups[0] ? state.groups[0].id : null);
           state.theme = parsed.theme || 'dark';
+
+          // Automatic cleanup: replace any legacy 'hisab' in saved groups with 'split'
+          state.groups.forEach(g => {
+            if (g.desc) g.desc = g.desc.replace(/hisab/gi, 'split');
+            if (g.description) g.description = g.description.replace(/hisab/gi, 'split');
+            if (g.name) g.name = g.name.replace(/hisab/gi, 'Split');
+            (g.expenses || []).forEach(e => {
+              if (e.description) e.description = e.description.replace(/hisab/gi, 'split');
+              if (e.notes) e.notes = e.notes.replace(/hisab/gi, 'split');
+            });
+          });
           return;
         }
       }
@@ -286,29 +297,48 @@
     document.getElementById('group-members-count').textContent = `${group.members.length} Friends`;
     document.getElementById('group-currency-badge').textContent = `Currency: ${currency}`;
     document.getElementById('group-display-title').textContent = group.name;
-    document.getElementById('group-display-desc').textContent = group.desc || 'Tracking shared spending and split breakdown.';
+    const rawDesc = group.desc || group.description || 'Tracking shared spending and split breakdown.';
+    document.getElementById('group-display-desc').textContent = rawDesc.replace(/hisab/gi, 'split');
 
     // Populate Groups Dropdown
     const groupsListDropdown = document.getElementById('groups-list-dropdown');
     groupsListDropdown.innerHTML = '';
     state.groups.forEach(g => {
-      const btn = document.createElement('button');
-      btn.className = `group-item-row ${g.id === group.id ? 'active' : ''}`;
-      btn.innerHTML = `
-        <div>
+      const row = document.createElement('div');
+      row.className = `group-item-row ${g.id === group.id ? 'active' : ''}`;
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.justifyContent = 'space-between';
+      row.style.gap = '0.5rem';
+
+      row.innerHTML = `
+        <div class="group-item-info" style="flex:1; cursor:pointer;">
           <div class="group-item-title">${escapeHtml(g.name)}</div>
-          <div class="group-item-type">${escapeHtml(g.type)} • ${g.members.length} friends</div>
+          <div class="group-item-type">${escapeHtml(g.type || 'Group')} • ${g.members.length} friends</div>
         </div>
-        ${g.id === group.id ? '<span style="color:var(--accent-emerald);font-size:0.8rem">● Active</span>' : ''}
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          ${g.id === group.id ? '<span style="color:var(--accent-emerald);font-size:0.75rem;font-weight:700">● Active</span>' : ''}
+          <button class="btn-group-trash" title="Delete Group ${escapeHtml(g.name)}" aria-label="Delete group" style="background:transparent; border:none; cursor:pointer; font-size:0.95rem; opacity:0.65; padding:4px; border-radius:4px; transition:opacity 0.2s;">🗑️</button>
+        </div>
       `;
-      btn.onclick = () => {
+
+      row.querySelector('.group-item-info').onclick = () => {
         state.activeGroupId = g.id;
         saveState();
         closeAllDropdowns();
         renderAll();
         showToast(`Switched to "${g.name}"`, 'info');
       };
-      groupsListDropdown.appendChild(btn);
+
+      const trash = row.querySelector('.btn-group-trash');
+      trash.onmouseenter = () => trash.style.opacity = '1';
+      trash.onmouseleave = () => trash.style.opacity = '0.65';
+      trash.onclick = (e) => {
+        e.stopPropagation();
+        deleteGroup(g.id);
+      };
+
+      groupsListDropdown.appendChild(row);
     });
   }
 
@@ -1290,6 +1320,38 @@
   }
 
   // =========================================================================
+  // DELETE GROUP
+  // =========================================================================
+  function deleteGroup(groupId) {
+    const targetGroup = state.groups.find(g => g.id === groupId);
+    if (!targetGroup) return;
+
+    const confirmed = confirm(
+      `🗑️ Delete Group: "${targetGroup.name}"?\n\n` +
+      `This will permanently remove this group, all ${targetGroup.expenses.length} logged expenses, and settled payment history.\n\n` +
+      `Do you want to permanently delete this group?`
+    );
+
+    if (!confirmed) return;
+
+    state.groups = state.groups.filter(g => g.id !== groupId);
+
+    if (state.groups.length > 0) {
+      if (state.activeGroupId === groupId) {
+        state.activeGroupId = state.groups[0].id;
+      }
+    } else {
+      state.activeGroupId = null;
+    }
+
+    saveState();
+    closeAllDropdowns();
+    closeAllModals();
+    renderAll();
+    showToast(`🗑️ Group "${targetGroup.name}" deleted.`, 'info');
+  }
+
+  // =========================================================================
   // MANAGE MEMBERS & UPI IDs
   // =========================================================================
   function openManageMembersModal() {
@@ -2019,6 +2081,20 @@
       closeAllDropdowns();
       openCreateGroupModal();
     };
+
+    // Delete Group Buttons
+    const heroDeleteBtn = document.getElementById('hero-delete-group-btn');
+    if (heroDeleteBtn) {
+      heroDeleteBtn.onclick = () => {
+        if (state.activeGroupId) deleteGroup(state.activeGroupId);
+      };
+    }
+    const modalDeleteBtn = document.getElementById('btn-delete-current-group');
+    if (modalDeleteBtn) {
+      modalDeleteBtn.onclick = () => {
+        if (state.activeGroupId) deleteGroup(state.activeGroupId);
+      };
+    }
 
     document.getElementById('hero-settle-up-btn').onclick = () => {
       // Scroll to settlement banner

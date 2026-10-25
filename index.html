@@ -146,7 +146,7 @@
           <div class="hero-actions">
             <button id="hero-settle-up-btn" class="btn-settle-highlight">
               <span class="icon-cash">⚡</span>
-              <span>Final Settlement </span>
+              <span>Final Settlement</span>
             </button>
             <button id="hero-privacy-btn" class="glass-btn btn-sm" title="Private Group Sync & Security">
               <span>🔒 Private Group Sync</span>
@@ -156,6 +156,9 @@
             </button>
             <button id="hero-new-group-btn" class="glass-btn btn-sm">
               <span>+ New Group</span>
+            </button>
+            <button id="hero-delete-group-btn" class="glass-btn btn-sm btn-danger-action" title="Delete this group">
+              <span>🗑️ Delete</span>
             </button>
           </div>
         </section>
@@ -715,7 +718,8 @@
         <div id="manage-members-list" class="manage-members-table"></div>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn-danger-outline btn-sm" id="btn-delete-current-group">🗑️ Delete Group</button>
         <button type="button" class="glow-primary-btn" id="close-manage-members-btn">Done</button>
       </div>
     </div>

@@ -656,6 +656,35 @@ button, input, select, textarea {
   box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
 }
 
+.btn-danger-action {
+  background: rgba(244, 63, 94, 0.1) !important;
+  color: #FB7185 !important;
+  border-color: rgba(244, 63, 94, 0.28) !important;
+}
+
+.btn-danger-action:hover {
+  background: rgba(244, 63, 94, 0.2) !important;
+  border-color: rgba(244, 63, 94, 0.5) !important;
+  color: #FFF !important;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  color: #FB7185;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-danger-outline:hover {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.6);
+  color: #FFF;
+}
+
 /* ================= Metrics Grid ================= */
 .metrics-grid {
   display: grid;

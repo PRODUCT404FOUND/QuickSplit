@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickSplit — Precision Cost Allocation & Instant Clearance</title>
+  <meta name="description"
+    content="QuickSplit — Fast, fair, and transparent group expense splitting and debt settlement for projects, hackathons, and flatmates.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <!-- Celebration Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <div class="app-layout">
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="nav-left">
+        <div class="brand" id="brand-home-btn" role="button" tabindex="0">
+          <div class="brand-icon-wrapper">
+            <span class="brand-icon">⚡</span>
+          </div>
+          <div class="brand-text">
+            <div class="brand-title">Quick<span class="highlight">Split</span> <span class="india-flag"
+                title="Made for India">🇮🇳</span></div>
+            <span class="brand-badge">PRECISION ALLOCATION & SETTLEMENT</span>
+          </div>
+        </div>
+
+        <!-- Group Selector Dropdown -->
+        <div class="group-switcher-container">
+          <button id="group-switcher-btn" class="glass-btn group-select-btn" aria-label="Select Group">
+            <span class="group-icon-dot" id="active-group-indicator"></span>
+            <span class="group-label-text" id="active-group-name">Select Group</span>
+            <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+
+          <div id="group-dropdown-menu" class="dropdown-menu glass-panel hidden">
+            <div class="dropdown-header">
+              <span>Your Groups</span>
+              <button id="nav-create-group-btn" class="icon-link-btn" title="Create New Group">+ New Group</button>
+            </div>
+            <div id="groups-list-dropdown" class="groups-list-scroll"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <!-- Currency Picker (Defaults to INR ₹) -->
+        <div class="currency-picker-wrapper">
+          <label for="currency-select" class="sr-only">Currency</label>
+          <select id="currency-select" class="currency-dropdown" title="Currency">
+            <option value="₹" selected>INR (₹)</option>
+            <option value="$">USD ($)</option>
+            <option value="€">EUR (€)</option>
+            <option value="£">GBP (£)</option>
+            <option value="AED">AED</option>
+          </select>
+        </div>
+
+        <!-- WhatsApp Quick Share -->
+        <button id="quick-share-btn" class="glass-btn action-btn-accent" title="Share Hisab on WhatsApp">
+          <span class="btn-emoji">💬</span>
+          <span class="btn-text">WhatsApp </span>
+        </button>
+
+        <!-- New Expense Button -->
+        <button id="nav-add-expense-btn" class="glow-primary-btn">
+          <span class="btn-plus">+</span>
+          <span class="btn-text">Add Expense</span>
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="theme-toggle-btn" class="icon-round-btn glass-btn" aria-label="Toggle Theme"
+          title="Toggle Dark/Light Mode">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- View State 1: Zero Groups Welcome Onboarding (shown if user has 0 groups) -->
+      <section id="onboarding-view" class="onboarding-card glass-panel hidden">
+        <div class="onboarding-badge">🚀 GET STARTED IN 30 SECONDS</div>
+        <h1>Split Project Costs & Flat Expenses Easily</h1>
+        <p class="onboarding-sub">
+          Whether you're splitting college hardware components, semester project bills, flat rent, or Swiggy orders —
+          <strong>QuickSplit</strong> calculates exactly <strong>who pays whom and how much</strong> with ranked
+          accuracy and instant clearance.
+        </p>
+
+        <div class="quick-create-box glass-panel">
+          <h3>Create Your Group to Start</h3>
+          <form id="onboarding-quick-group-form">
+            <div class="form-field">
+              <label for="ob-group-name">Group / Project Name <span class="required">*</span></label>
+              <input type="text" id="ob-group-name" placeholder="e.g. B.Tech Major Project, Flat 302, Hackathon Team"
+                required>
+            </div>
+
+            <div class="form-field">
+              <label>Group Members (At least 2 friends) <span class="required">*</span></label>
+              <div class="member-input-row">
+                <input type="text" id="ob-member-input"
+                  placeholder="Type friend's name (e.g. Aman, Rahul, Me) and press Enter">
+                <button type="button" id="ob-add-member-btn" class="glass-btn btn-sm">+ Add</button>
+              </div>
+              <div id="ob-members-chips" class="members-chip-container"></div>
+              <small class="field-hint">Tip: By default, we added "Me", "Friend 1", "Friend 2" for you. You can change
+                them anytime!</small>
+            </div>
+
+            <button type="submit" class="glow-primary-btn full-width" style="margin-top: 1rem;">
+              🚀 Create Group & Start Splitting
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- View State 2: Active Group Dashboard -->
+      <div id="dashboard-view">
+        <!-- Group Hero Banner -->
+        <section class="group-hero-section glass-panel">
+          <div class="hero-left">
+            <div class="group-meta">
+              <span id="group-type-tag" class="pill-badge pill-purple">College Project</span>
+              <span id="group-members-count" class="pill-badge pill-neutral">3 Members</span>
+              <span id="group-currency-badge" class="pill-badge pill-green">Currency: ₹ (INR)</span>
+            </div>
+            <h1 id="group-display-title" class="group-title">Loading Group...</h1>
+            <p id="group-display-desc" class="group-description">No description provided.</p>
+          </div>
+
+          <div class="hero-actions">
+            <button id="hero-settle-up-btn" class="btn-settle-highlight">
+              <span class="icon-cash">⚡</span>
+              <span>Final Settlement </span>
+            </button>
+            <button id="hero-privacy-btn" class="glass-btn btn-sm" title="Private Group Sync & Security">
+              <span>🔒 Private Group Sync</span>
+            </button>
+            <button id="hero-manage-members-btn" class="glass-btn btn-sm">
+              <span>👥 Manage Friends</span>
+            </button>
+            <button id="hero-new-group-btn" class="glass-btn btn-sm">
+              <span>+ New Group</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Metric Highlights Grid -->
+        <section class="metrics-grid">
+          <!-- Metric 1: Total Spending -->
+          <div class="metric-card glass-panel">
+            <div class="metric-header">
+              <span class="metric-title">Total Spending</span>
+              <div class="metric-icon-circle icon-blue">💰</div>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metric-total-spent">₹0.00</span>
+            </div>
+            <div class="metric-subtitle">
+              <span id="metric-expense-count">0 expenses</span> logged
+            </div>
+          </div>
+
+          <!-- Metric 2: Per Person Share -->
+          <div class="metric-card glass-panel">
+            <div class="metric-header">
+              <span class="metric-title">Per Person Share</span>
+              <div class="metric-icon-circle icon-indigo">⚖️</div>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metric-avg-per-person">₹0.00</span>
+            </div>
+            <div class="metric-subtitle">
+              Equal share across <span id="metric-active-members-count">0</span> friends
+            </div>
+          </div>
+
+          <!-- Metric 3: Pending Transfers -->
+          <div class="metric-card glass-panel">
+            <div class="metric-header">
+              <span class="metric-title">Pending Clearances</span>
+              <div class="metric-icon-circle icon-amber">⏳</div>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metric-pending-transactions">0</span>
+              <span class="metric-unit">transfers needed</span>
+            </div>
+            <div class="metric-subtitle" id="metric-pending-subtext">
+              Direct Split calculation
+            </div>
+          </div>
+
+          <!-- Metric 4: Total Settled / Cleared -->
+          <div class="metric-card glass-panel">
+            <div class="metric-header">
+              <span class="metric-title">Money Cleared</span>
+              <div class="metric-icon-circle icon-emerald">✅</div>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metric-settled-amount">₹0.00</span>
+            </div>
+            <div class="metric-subtitle">
+              <span id="metric-settled-count">0</span> payments recorded
+            </div>
+          </div>
+        </section>
+
+        <!-- Settlement Highlight Box (Shown prominently right below metrics!) -->
+        <section id="settlement-highlight-banner" class="settle-banner-box glass-panel">
+          <div class="settle-banner-header">
+            <div>
+              <span class="badge-tag">⚡ DIRECT SETTLEMENT (WHO PAYS WHOM)</span>
+              <h2>Clear Your Money</h2>
+            </div>
+            <div class="banner-actions">
+              <button id="banner-share-whatsapp-btn" class="glass-btn btn-accent-glow btn-sm">
+                <span>💬 Share on WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards of Who owes whom -->
+          <div id="banner-transfers-list" class="banner-transfers-grid">
+            <!-- Populated dynamically: Friend 1 pays You ₹100 with Pay via UPI & Clear Money buttons -->
+          </div>
+
+          <div id="banner-all-cleared" class="all-cleared-card glass-panel hidden">
+            <div class="cleared-animation">🎉</div>
+            <h3>Sabka Hisab Clear Hai! (All Settled)</h3>
+            <p>Nobody owes anything in this group right now.</p>
+          </div>
+        </section>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs-nav-container">
+          <div class="tabs-list">
+            <button class="tab-btn active" data-tab="expenses">
+              <span class="tab-icon">📋</span>
+              <span>Expenses</span>
+              <span class="tab-count-pill" id="tab-expenses-badge">0</span>
+            </button>
+            <button class="tab-btn" data-tab="balances">
+              <span class="tab-icon">👥</span>
+              <span>Member Balances</span>
+            </button>
+            <button class="tab-btn" data-tab="insights">
+              <span class="tab-icon">📊</span>
+              <span>Spending Breakdown</span>
+            </button>
+            <button class="tab-btn" data-tab="history">
+              <span class="tab-icon">📜</span>
+              <span>Cleared History</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 1: Expenses View -->
+        <div id="tab-content-expenses" class="tab-pane active">
+          <!-- Filter & Search Bar -->
+          <div class="filters-bar glass-panel">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="expense-search-input" placeholder="Search by item, member, or notes..."
+                autocomplete="off">
+              <button id="expense-search-clear" class="search-clear-btn hidden" aria-label="Clear Search">✕</button>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-category" class="filter-label">Category:</label>
+              <select id="filter-category" class="filter-select">
+                <option value="all">All Categories</option>
+                <option value="Hardware">🔌 Hardware / Components</option>
+                <option value="Software">☁️ Software / Cloud / APIs</option>
+                <option value="Printing">🖨️ Printing & Xerox</option>
+                <option value="Food">🍕 Food / Swiggy / Chai</option>
+                <option value="Groceries">🛒 Groceries / Blinkit / Zepto</option>
+                <option value="Rent">🏠 Rent / PG / Flat</option>
+                <option value="Utilities">💡 Electricity & WiFi Bill</option>
+                <option value="Transport">🚕 Auto / Cab / Petrol</option>
+                <option value="Other">📦 Other Project Spending</option>
+              </select>
+            </div>
+
+            <button id="btn-add-expense-trigger" class="glow-primary-btn btn-sm">
+              <span>+ Add Expense</span>
+            </button>
+          </div>
+
+          <!-- Expenses List -->
+          <div class="expenses-container">
+            <div id="expenses-list" class="expenses-list">
+              <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Empty state when no expenses added yet -->
+            <div id="expenses-empty-state" class="empty-state glass-panel hidden">
+              <div class="empty-emoji">🧾</div>
+              <h3>No expenses logged yet</h3>
+              <p>Add your first bill or purchase. Multiple friends can pay together (e.g. You paid ₹500, Friend 1 paid
+                ₹300, Friend 2 paid ₹400).</p>
+              <button class="glow-primary-btn btn-inline" onclick="window.app.openAddExpenseModal()">+ Add First
+                Expense</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Member Balances View -->
+        <div id="tab-content-balances" class="tab-pane">
+          <div class="balances-header-row">
+            <div>
+              <h2>Member Balances & Hisab</h2>
+              <p class="section-desc">Sorted by who receives money first, followed by settled friends and payers.</p>
+            </div>
+            <button id="btn-add-member-direct" class="glass-btn btn-sm">
+              <span>+ Add Friend</span>
+            </button>
+          </div>
+
+          <!-- Sorted Grid of Member Cards (Receivers at front, Payers after) -->
+          <div id="members-balance-grid" class="members-grid"></div>
+        </div>
+
+        <!-- Tab 3: Insights & Analytics -->
+        <div id="tab-content-insights" class="tab-pane">
+          <div class="insights-grid">
+            <!-- Category Breakdown -->
+            <div class="insight-card glass-panel">
+              <div class="insight-card-header">
+                <h3>🏷️ Spending by Category</h3>
+                <span class="card-subtitle">Where money went</span>
+              </div>
+              <div id="category-breakdown-list" class="category-bars-list"></div>
+            </div>
+
+            <!-- Payer Breakdown -->
+            <div class="insight-card glass-panel">
+              <div class="insight-card-header">
+                <h3>💳 Who Fronted Money</h3>
+                <span class="card-subtitle">Total paid out of pocket</span>
+              </div>
+              <div id="payer-breakdown-list" class="payer-bars-list"></div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="insight-card glass-panel full-width">
+              <div class="insight-card-header">
+                <h3>📌 Snapshot Summary</h3>
+                <span class="card-subtitle">Quick overview</span>
+              </div>
+              <div class="summary-stats-banner" id="project-insights-stats"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Cleared History -->
+        <div id="tab-content-history" class="tab-pane">
+          <div class="section-title-row">
+            <div>
+              <h2>Cleared Payments History</h2>
+              <p class="section-desc">Record of all cleared settlements via UPI, GPay, PhonePe, Paytm, or Cash.</p>
+            </div>
+            <button id="btn-export-csv" class="glass-btn btn-sm">
+              <span>📥 Export to CSV / Excel</span>
+            </button>
+          </div>
+
+          <div id="settlement-history-list" class="history-list"></div>
+
+          <div id="history-empty-state" class="empty-state glass-panel hidden">
+            <div class="empty-emoji">📜</div>
+            <h3>No payments cleared yet</h3>
+            <p>When friends pay their share back and click "Clear Money", it will be saved here.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <span>⚡ <strong>QuickSplit</strong> — Precision Cost Allocation & Instant Clearance for Projects &
+            Residences.</span>
+        </div>
+        <div class="footer-right">
+          <span>100% Client-side & Private • Saved in your browser</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Modal 1: Add Expense (Supports Single Payer OR Multiple Payers!) -->
+  <div id="modal-expense" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-expense-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">🧾</span>
+          <h2 id="modal-expense-title">Add Expense</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-expense" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="form-expense" class="modal-body">
+        <input type="hidden" id="expense-id-input" value="">
+
+        <!-- Title & Category Row -->
+        <div class="form-row">
+          <div class="form-field flex-2">
+            <label for="expense-desc">What was this for? <span class="required">*</span></label>
+            <input type="text" id="expense-desc" placeholder="e.g. Raspberry Pi + Sensors, WiFi Bill, Swiggy Dinner"
+              required>
+          </div>
+          <div class="form-field flex-1">
+            <label for="expense-category">Category <span class="required">*</span></label>
+            <select id="expense-category" required>
+              <option value="Hardware">🔌 Hardware / Components</option>
+              <option value="Software">☁️ Software / Cloud / APIs</option>
+              <option value="Printing">🖨️ Printing & Xerox</option>
+              <option value="Food">🍕 Food / Swiggy / Chai</option>
+              <option value="Groceries">🛒 Groceries / Blinkit</option>
+              <option value="Rent">🏠 Rent / PG</option>
+              <option value="Utilities">💡 Electricity & WiFi</option>
+              <option value="Transport">🚕 Auto / Cab / Petrol</option>
+              <option value="Other">📦 Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="expense-date">Date <span class="required">*</span></label>
+            <input type="date" id="expense-date" required>
+          </div>
+        </div>
+
+        <!-- Payer Mode Toggle: Single Payer vs Multiple People Paid! -->
+        <div class="form-field">
+          <label>Who Paid for this? <span class="required">*</span></label>
+          <div class="payer-mode-toggle">
+            <button type="button" class="payer-mode-btn active" id="btn-payer-mode-single">Single Person Paid</button>
+            <button type="button" class="payer-mode-btn" id="btn-payer-mode-multi">Multiple People Paid
+              Together</button>
+          </div>
+        </div>
+
+        <!-- Mode A: Single Person Paid -->
+        <div id="payer-single-container" class="payer-mode-section">
+          <div class="form-row">
+            <div class="form-field flex-1">
+              <label for="expense-payer">Paid By <span class="required">*</span></label>
+              <select id="expense-payer"></select>
+            </div>
+            <div class="form-field flex-1">
+              <label for="expense-amount">Total Amount (<span class="currency-label-span">₹</span>) <span
+                  class="required">*</span></label>
+              <div class="input-with-currency">
+                <span class="currency-addon" id="expense-currency-addon">₹</span>
+                <input type="number" id="expense-amount" step="0.01" min="0.01" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode B: Multiple People Paid Together (Addresses the User's Exact Requirement!) -->
+        <div id="payer-multi-container" class="payer-mode-section hidden">
+          <div class="multi-payer-helper">
+            💡 Enter how much each person contributed towards this bill (e.g. You: ₹500, Friend 1: ₹300, Friend 2:
+            ₹400). Total is auto-calculated!
+          </div>
+          <div id="multi-payer-inputs-list" class="multi-payer-list">
+            <!-- Dynamically populated rows for each member -->
+          </div>
+          <div class="multi-payer-total-bar">
+            <span>Calculated Total:</span>
+            <strong id="multi-payer-total-display" class="highlight-val">₹0.00</strong>
+          </div>
+        </div>
+
+        <!-- Split Targets: Who participated / splits this bill -->
+        <div class="split-members-container">
+          <div class="split-members-header">
+            <span class="subtext">Who splits this bill?</span>
+            <div class="split-quick-actions">
+              <button type="button" id="btn-select-all-members" class="btn-micro">Select All</button>
+              <button type="button" id="btn-clear-members" class="btn-micro">Clear</button>
+            </div>
+          </div>
+          <div id="split-members-list" class="split-members-list">
+            <!-- Checkboxes for each member -->
+          </div>
+          <div class="split-summary-bar">
+            <span>Per person share: <strong id="split-per-person-preview">₹0.00</strong></span>
+            <span id="split-validation-msg" class="split-validation valid">✓ Fair equal split</span>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-field">
+          <label for="expense-notes">Notes / Bill Link / Reference (Optional)</label>
+          <input type="text" id="expense-notes" placeholder="e.g. Amazon invoice, or Bill paid on Google Pay">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="glass-btn" id="cancel-modal-expense">Cancel</button>
+          <button type="submit" class="glow-primary-btn" id="submit-expense-btn">Save Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Settle Up / Clear Money Payment -->
+  <div id="modal-settle" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-settle-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">💸</span>
+          <h2 id="modal-settle-title">Clear & Record Payment</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-settle" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="form-settle" class="modal-body">
+        <p class="modal-helper-text">
+          Did someone pay their share back via GPay, PhonePe, Paytm, UPI, or Cash? Record it to clear the balance!
+        </p>
+
+        <!-- Visual Flow Card -->
+        <div class="transfer-visual-box">
+          <div class="transfer-actor">
+            <div class="avatar-circle" id="settle-payer-avatar">?</div>
+            <span class="actor-name" id="settle-payer-name">Payer</span>
+            <span class="actor-role">Pays</span>
+          </div>
+
+          <div class="transfer-arrow-box">
+            <span class="arrow-amount" id="settle-preview-amount">₹0.00</span>
+            <span class="arrow-icon">➔</span>
+          </div>
+
+          <div class="transfer-actor">
+            <div class="avatar-circle" id="settle-receiver-avatar">?</div>
+            <span class="actor-name" id="settle-receiver-name">Receiver</span>
+            <span class="actor-role">Gets</span>
+          </div>
+        </div>
+
+        <!-- UPI Quick Pay Card (if receiver has UPI ID or standard QR) -->
+        <div id="settle-upi-quick-box" class="upi-action-box glass-panel">
+          <div class="upi-logo-row">
+            <span class="upi-text">⚡ Pay Instantly via UPI App</span>
+            <span class="upi-badge">GPay / PhonePe / Paytm</span>
+          </div>
+          <div class="upi-btn-row">
+            <a id="btn-launch-upi-intent" class="glow-primary-btn btn-sm full-width" target="_blank"
+              rel="noopener noreferrer">
+              📱 Open UPI App (₹<span id="upi-intent-amount-span">0</span>)
+            </a>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="settle-payer-select">Who is paying? <span class="required">*</span></label>
+            <select id="settle-payer-select" required></select>
+          </div>
+          <div class="form-field">
+            <label for="settle-receiver-select">Who receives the money? <span class="required">*</span></label>
+            <select id="settle-receiver-select" required></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="settle-amount">Amount Cleared (<span class="currency-label-span">₹</span>) <span
+                class="required">*</span></label>
+            <div class="input-with-currency">
+              <span class="currency-addon" id="settle-currency-addon">₹</span>
+              <input type="number" id="settle-amount" step="0.01" min="0.01" required>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="settle-method">Payment Mode <span class="required">*</span></label>
+            <select id="settle-method" required>
+              <option value="Google Pay">⚡ Google Pay (GPay)</option>
+              <option value="PhonePe">📱 PhonePe</option>
+              <option value="Paytm">💳 Paytm / UPI</option>
+              <option value="Cash">💵 Cash</option>
+              <option value="NetBanking">🏦 Bank Transfer (IMPS/NEFT)</option>
+              <option value="CRED">✨ CRED / Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="settle-notes">Note / UPI Ref No. (Optional)</label>
+          <input type="text" id="settle-notes" placeholder="e.g. Paid via PhonePe, UTR #20391039">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="glass-btn" id="cancel-modal-settle">Cancel</button>
+          <button type="submit" class="glow-primary-btn" id="confirm-settlement-btn">🎉 Confirm & Clear Debt</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: Create New Group -->
+  <div id="modal-group" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-group-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">📁</span>
+          <h2 id="modal-group-title">Create New Group</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-group" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="form-group" class="modal-body">
+        <div class="form-field">
+          <label for="group-name-input">Group or Project Name <span class="required">*</span></label>
+          <input type="text" id="group-name-input" placeholder="e.g. Final Year AI Project, Flat 204, Goa Trip"
+            required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="group-type-select">Group Type <span class="required">*</span></label>
+            <select id="group-type-select" required>
+              <option value="College Project">🎓 College Project / Capstone</option>
+              <option value="Roommates">🏠 Flat / PG Roommates</option>
+              <option value="Hackathon">⚡ Hackathon / Competition</option>
+              <option value="Trip">✈️ Trip / Vacation</option>
+              <option value="Other">👥 General Split</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="group-currency-select">Currency <span class="required">*</span></label>
+            <select id="group-currency-select" required>
+              <option value="₹">INR (₹)</option>
+              <option value="$">USD ($)</option>
+              <option value="€">EUR (€)</option>
+              <option value="£">GBP (£)</option>
+              <option value="AED">AED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="group-desc-input">Description / Purpose (Optional)</label>
+          <input type="text" id="group-desc-input" placeholder="e.g. Hardware components, cloud hosting, and snacks">
+        </div>
+
+        <!-- Members Input -->
+        <div class="form-field">
+          <label>Members (Add at least 2 friends) <span class="required">*</span></label>
+          <div class="member-input-row">
+            <input type="text" id="new-member-name-input" placeholder="Type friend's name and click + Add">
+            <button type="button" id="btn-add-member-to-group-form" class="glass-btn btn-sm">+ Add</button>
+          </div>
+          <div id="modal-members-chip-list" class="members-chip-container"></div>
+          <small class="field-hint">You can add UPI IDs for each member anytime in settings.</small>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="glass-btn" id="cancel-modal-group">Cancel</button>
+          <button type="submit" class="glow-primary-btn" id="submit-group-btn">Create Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: Manage Members (Add Friend & UPI ID) -->
+  <div id="modal-members" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-members-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">👥</span>
+          <h2 id="modal-members-title">Manage Friends & UPI IDs</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-members" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-field">
+          <label>Add New Friend to Group</label>
+          <div class="member-input-row">
+            <input type="text" id="manage-new-member-name" placeholder="Friend's name (e.g. Rohan)">
+            <input type="text" id="manage-new-member-upi" placeholder="UPI ID (optional, e.g. rohan@okaxis)"
+              style="max-width: 220px;">
+            <button type="button" id="btn-manage-add-member" class="glow-primary-btn btn-sm">+ Add</button>
+          </div>
+        </div>
+
+        <div id="manage-members-list" class="manage-members-table"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="glow-primary-btn" id="close-manage-members-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: WhatsApp Hisab Share Modal -->
+  <div id="modal-share" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-share-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">💬</span>
+          <h2 id="modal-share-title">Share Hisab on WhatsApp</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-share" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-helper-text">
+          Copy this formatted message and send it in your WhatsApp, Telegram, or College group chat:
+        </p>
+
+        <div class="whatsapp-preview-box">
+          <div class="whatsapp-header">
+            <span class="wa-dot green"></span>
+            <span class="wa-title">WhatsApp Hisab Message</span>
+          </div>
+          <pre id="whatsapp-message-content" class="whatsapp-bubble"></pre>
+        </div>
+
+        <div class="share-actions-row">
+          <button id="btn-copy-wa-text" class="glow-primary-btn flex-1">
+            <span>📋 Copy to Clipboard</span>
+          </button>
+          <a id="btn-open-wa-web" target="_blank" rel="noopener noreferrer" class="glass-btn btn-accent-glow flex-1">
+            <span>🟢 Open WhatsApp</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="glass-btn" id="close-modal-share-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Dynamic UPI QR Code Scanner Modal (NPCI Standard) -->
+  <div id="modal-upi-qr" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-upi-qr-title">
+    <div class="modal-dialog glass-modal upi-qr-modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">⚡</span>
+          <h2 id="modal-upi-qr-title">Scan & Pay via UPI</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-upi-qr" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body upi-qr-body">
+        <div class="upi-recipient-meta">
+          <div class="upi-payer-flow-text">
+            <span id="qr-payer-name" class="highlight-actor payer">Aman</span>
+            <span>pays</span>
+            <span id="qr-receiver-name" class="highlight-actor receiver">Rohan</span>
+          </div>
+          <div class="upi-amount-hero">
+            <span id="qr-amount-display" class="qr-amount-val">₹0.00</span>
+          </div>
+        </div>
+
+        <!-- The Dynamic QR Code Box -->
+        <div class="upi-qr-frame glass-panel">
+          <div id="upi-qr-container" class="qr-canvas-wrapper">
+            <img id="upi-qr-image" alt="Dynamic UPI QR Code" class="upi-qr-img" src="">
+            <div id="upi-qr-placeholder" class="qr-placeholder hidden">
+              <span>⚠️ Recipient has not added a UPI ID yet</span>
+            </div>
+          </div>
+          <div class="qr-instruction-tag">
+            <span>📷 Scan with any Indian UPI App</span>
+          </div>
+        </div>
+
+        <!-- Inline UPI ID Editor if not present or needs change -->
+        <div id="qr-inline-upi-editor" class="inline-upi-box glass-panel hidden">
+          <label for="qr-inline-upi-input">Enter Receiver's UPI ID to generate live QR:</label>
+          <div class="member-input-row" style="margin-top:0.4rem;">
+            <input type="text" id="qr-inline-upi-input" placeholder="e.g. rohan@okaxis or 9876543210@paytm">
+            <button type="button" id="btn-save-inline-upi" class="glow-primary-btn btn-sm">Generate QR</button>
+          </div>
+        </div>
+
+        <div class="upi-supported-badges">
+          <span class="upi-app-pill">Google Pay</span>
+          <span class="upi-app-pill">PhonePe</span>
+          <span class="upi-app-pill">Paytm</span>
+          <span class="upi-app-pill">BHIM</span>
+          <span class="upi-app-pill">Cred</span>
+        </div>
+
+        <div class="upi-modal-actions-row">
+          <a id="qr-open-intent-btn" class="glass-btn btn-accent-glow flex-1" target="_blank" rel="noopener noreferrer">
+            <span>📱 Pay in UPI App</span>
+          </a>
+          <button id="qr-mark-settled-btn" class="glow-primary-btn flex-1">
+            <span>✅ Mark as Settled</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: Private Group Sync & Security Modal -->
+  <div id="modal-group-privacy" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="modal-group-privacy-title">
+    <div class="modal-dialog glass-modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge">🔒</span>
+          <h2 id="modal-group-privacy-title">Private Group Sync & Security</h2>
+        </div>
+        <button class="modal-close-btn" id="close-modal-group-privacy" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="privacy-notice-box glass-panel">
+          <div class="privacy-notice-title">🛡️ 100% Private to Your Group</div>
+          <p class="privacy-notice-text">
+            Your project costs and roommate bills are stored in isolated local storage.
+            <strong>No strangers or public search engines have access to your data.</strong> Only people who scan your
+            Team Sync QR or receive your private access link can view or update this group.
+          </p>
+        </div>
+
+        <div class="group-keys-display glass-panel">
+          <div class="key-field-row">
+            <span class="key-label">Group Name:</span>
+            <strong id="privacy-group-name" class="key-val">Loading...</strong>
+          </div>
+          <div class="key-field-row">
+            <span class="key-label">Private Group ID:</span>
+            <span id="privacy-group-id" class="key-val-mono">QS-GRP-8921</span>
+          </div>
+          <div class="key-field-row">
+            <span class="key-label">Private Cryptographic Key:</span>
+            <span id="privacy-group-secret" class="key-val-mono">SECRET-KEY</span>
+          </div>
+        </div>
+
+        <!-- Teammate Direct Camera Scan Sync -->
+        <div class="privacy-sync-qr-box glass-panel">
+          <h4>📲 Scan with Phone Camera to Import Group</h4>
+          <p class="subtext">Have your teammate scan this QR code with their mobile camera to load this project on their
+            phone:</p>
+          <div class="sync-qr-wrapper">
+            <img id="privacy-sync-qr-img" alt="Private Group Sync QR" class="sync-qr-img" src="">
+          </div>
+        </div>
+
+        <div class="share-actions-row">
+          <button id="btn-copy-private-link" class="glow-primary-btn flex-1">
+            <span>📋 Copy Private Team Access Link</span>
+          </button>
+          <button id="btn-export-private-backup" class="glass-btn flex-1">
+            <span>💾 Export Encrypted Backup (.json)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="glass-btn" id="close-modal-group-privacy-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- JavaScript Application Logic -->
+  <script src="app.js"></script>
+</body>
+
+</html>

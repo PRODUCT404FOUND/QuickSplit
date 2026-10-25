@@ -192,35 +192,32 @@
         group.secretKey = generateSecretKey();
       }
 
-      // E2EE: Encrypt all member UPI IDs before syncing to cloud database
-      const cloudMembers = (group.members || []).map(m => {
-        const cm = {
-          id: m.id,
-          name: m.name || '',
-          color: m.color || '#6366F1'
-        };
-        const rawUpi = (m.upiId || '').trim();
-        if (rawUpi) {
-          cm.encUpiId = encryptSensitiveData(rawUpi, group.secretKey);
-        }
-        // STRICT PRIVACY: NEVER send plain-text upiId to cloud Firestore database
-        return cm;
-      });
-
-      const payload = {
-        id: group.id,
+      // FULL ZERO-KNOWLEDGE E2EE:
+      // Bundle ALL sensitive fields (member names, UPI IDs, expense amounts, titles, payers, settlements)
+      // into a single encrypted payload. The database holder only sees unreadable ciphertext!
+      const sensitiveBundle = {
         name: group.name || 'Group',
         currency: group.currency || '₹',
         category: group.category || 'Other',
         description: group.description || group.desc || '',
-        secretKey: group.secretKey || '',
-        members: cloudMembers,
+        members: group.members || [],
         expenses: group.expenses || [],
         settlements: group.settlements || [],
-        updatedAt: Date.now()
+        secretKey: group.secretKey
       };
 
-      firestoreDb.collection('groups').doc(group.id).set(payload, { merge: true })
+      const encryptedBlob = encryptSensitiveData(JSON.stringify(sensitiveBundle), group.secretKey);
+
+      // STRICT PRIVACY: NEVER store plain-text names, UPI IDs, or amounts in Firestore!
+      const payload = {
+        id: group.id,
+        updatedAt: Date.now(),
+        encData: encryptedBlob
+      };
+
+      // Set WITHOUT { merge: true } so any previous plain-text fields
+      // (members, expenses, amounts, names, upiIds) are completely erased and overwritten in Firestore!
+      firestoreDb.collection('groups').doc(group.id).set(payload)
         .then(() => {
           updateSyncStatusUI('synced');
         })
@@ -256,72 +253,83 @@
         if (!cloud || !cloud.id) return;
 
         const existsIdx = state.groups.findIndex(g => g.id === groupId);
-        if (existsIdx !== -1) {
-          const current = state.groups[existsIdx];
-          const cloudTime = cloud.updatedAt || 0;
-          const localTime = current._updatedAt || 0;
-          const cloudExpCount = (cloud.expenses || []).length;
-          const localExpCount = (current.expenses || []).length;
-          const cloudStlCount = (cloud.settlements || []).length;
-          const localStlCount = (current.settlements || []).length;
+        const current = existsIdx !== -1 ? state.groups[existsIdx] : null;
+        const secKey = (current && current.secretKey) || (cloud.secretKey) || '';
 
+        let decryptedData = null;
+
+        // 1. Decrypt from Zero-Knowledge E2EE payload
+        if (cloud.encData) {
+          const decJson = decryptSensitiveData(cloud.encData, secKey);
+          if (decJson) {
+            try {
+              decryptedData = JSON.parse(decJson);
+            } catch (err) {
+              console.warn('Failed to parse decrypted cloud group JSON:', err);
+            }
+          }
+        } else if (cloud.members) {
+          // 2. Legacy unencrypted cloud document fallback (migrates immediately)
+          decryptedData = {
+            name: cloud.name || 'Group',
+            currency: cloud.currency || '₹',
+            category: cloud.category || 'Other',
+            description: cloud.description || cloud.desc || '',
+            members: cloud.members || [],
+            expenses: cloud.expenses || [],
+            settlements: cloud.settlements || [],
+            secretKey: cloud.secretKey || secKey
+          };
+        }
+
+        if (!decryptedData) return;
+
+        const cloudTime = cloud.updatedAt || 0;
+        const localTime = (current && current._updatedAt) || 0;
+        const cloudExpCount = (decryptedData.expenses || []).length;
+        const localExpCount = current ? (current.expenses || []).length : -1;
+        const cloudStlCount = (decryptedData.settlements || []).length;
+        const localStlCount = current ? (current.settlements || []).length : -1;
+
+        if (existsIdx !== -1) {
           if (cloudTime > localTime || cloudExpCount !== localExpCount || cloudStlCount !== localStlCount) {
             isReceivingCloudUpdate = true;
-            const secKey = cloud.secretKey || current.secretKey || '';
-            const decryptedMembers = (cloud.members || current.members || []).map(m => {
-              let plainUpi = m.upiId || '';
-              if (m.encUpiId) {
-                const dec = decryptSensitiveData(m.encUpiId, secKey);
-                if (dec) plainUpi = dec;
-              }
-              return {
-                ...m,
-                upiId: plainUpi
-              };
-            });
-
             state.groups[existsIdx] = {
               ...current,
-              secretKey: secKey,
-              members: decryptedMembers,
-              expenses: cloud.expenses || current.expenses,
-              settlements: cloud.settlements || current.settlements,
-              name: cloud.name || current.name,
-              currency: cloud.currency || current.currency,
+              ...decryptedData,
+              id: cloud.id,
+              secretKey: secKey || decryptedData.secretKey || current.secretKey,
               _updatedAt: cloudTime || Date.now()
             };
             saveLocalStateOnly();
             renderAll();
             isReceivingCloudUpdate = false;
             updateSyncStatusUI('synced');
+
+            // If the document in cloud was legacy unencrypted, immediately re-sync as E2EE to wipe plain-text
+            if (!cloud.encData) {
+              syncGroupToCloud(state.groups[existsIdx]);
+            }
           }
         } else {
           // New group received from cloud
           isReceivingCloudUpdate = true;
-          const secKey = cloud.secretKey || '';
-          const decryptedMembers = (cloud.members || []).map(m => {
-            let plainUpi = m.upiId || '';
-            if (m.encUpiId) {
-              const dec = decryptSensitiveData(m.encUpiId, secKey);
-              if (dec) plainUpi = dec;
-            }
-            return {
-              ...m,
-              upiId: plainUpi
-            };
-          });
-
-          state.groups.unshift({
-            ...cloud,
-            secretKey: secKey,
-            members: decryptedMembers,
-            _updatedAt: cloud.updatedAt || Date.now()
-          });
+          const newGroup = {
+            ...decryptedData,
+            id: cloud.id,
+            secretKey: secKey || decryptedData.secretKey || generateSecretKey(),
+            _updatedAt: cloudTime || Date.now()
+          };
+          state.groups.unshift(newGroup);
           state.activeGroupId = cloud.id;
           saveLocalStateOnly();
           renderAll();
           isReceivingCloudUpdate = false;
           updateSyncStatusUI('synced');
+
+          if (!cloud.encData) {
+            syncGroupToCloud(newGroup);
+          }
         }
       }, err => {
         console.warn('Live sync listener:', err);
@@ -2349,30 +2357,46 @@
                 if (doc.exists) {
                   const cloud = doc.data();
                   const secKey = sharedKey || cloud.secretKey || '';
-                  const decryptedMembers = (cloud.members || []).map(m => {
-                    let plainUpi = m.upiId || '';
-                    if (m.encUpiId) {
-                      const dec = decryptSensitiveData(m.encUpiId, secKey);
-                      if (dec) plainUpi = dec;
+                  let groupData = null;
+
+                  if (cloud.encData) {
+                    const decJson = decryptSensitiveData(cloud.encData, secKey);
+                    if (decJson) {
+                      try {
+                        groupData = JSON.parse(decJson);
+                      } catch (err) {
+                        console.warn('Error parsing decrypted cloud group:', err);
+                      }
                     }
-                    return {
-                      ...m,
-                      upiId: plainUpi
-                    };
-                  });
-                  cloud.members = decryptedMembers;
-                  cloud.secretKey = secKey;
+                  } else if (cloud.members) {
+                    groupData = cloud;
+                  }
+
+                  if (!groupData) {
+                    showToast('⚠️ Unable to decrypt group with provided key.', 'error');
+                    return;
+                  }
+
+                  groupData.id = groupId;
+                  groupData.secretKey = secKey || groupData.secretKey || '';
+                  groupData._updatedAt = cloud.updatedAt || Date.now();
 
                   const existsIdx = state.groups.findIndex(g => g.id === groupId);
                   if (existsIdx !== -1) {
-                    state.groups[existsIdx] = { ...state.groups[existsIdx], ...cloud };
+                    state.groups[existsIdx] = { ...state.groups[existsIdx], ...groupData };
                   } else {
-                    state.groups.unshift(cloud);
+                    state.groups.unshift(groupData);
                   }
                   state.activeGroupId = groupId;
                   saveLocalStateOnly();
                   renderAll();
-                  showToast(`✅ Connected to "${cloud.name}" via Live Cloud Sync!`, 'success');
+
+                  // If cloud still had plain text, sanitize it into encData
+                  if (!cloud.encData) {
+                    syncGroupToCloud(state.groups[state.groups.findIndex(g => g.id === groupId)]);
+                  }
+
+                  showToast(`✅ Connected to "${groupData.name}" via Zero-Knowledge Live Sync!`, 'success');
                   history.replaceState(null, '', window.location.pathname);
                 } else {
                   showToast('Group not found in cloud.', 'warning');
@@ -2983,8 +3007,13 @@
 
   // --- Initialize on DOM Ready ---
   document.addEventListener('DOMContentLoaded', () => {
-    initFirebase();
     loadState();
+    initFirebase();
+    const active = getActiveGroup();
+    if (active) {
+      listenToGroupCloudSync(active.id);
+      syncGroupToCloud(active); // Automatically overwrites and cleanses any plain-text in Firestore
+    }
     initEvents();
     renderAll();
     // Check if a teammate shared a group import link

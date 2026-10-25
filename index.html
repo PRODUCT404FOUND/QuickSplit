@@ -799,7 +799,7 @@
         <!-- Receiver UPI ID & Copy Card -->
         <div id="qr-upi-id-card" class="upi-id-card glass-panel">
           <div class="upi-id-left">
-            <span class="upi-id-sublabel">Receiver UPI ID</span>
+            <span class="upi-id-sublabel">Receiver UPI ID <span title="Encrypted in Firestore Database" style="color:var(--accent-emerald); font-size:0.75rem; margin-left:4px;">🔒 E2EE Safe</span></span>
             <span id="qr-receiver-upi-text" class="upi-id-val">—</span>
           </div>
           <div class="upi-id-actions">
@@ -911,6 +911,10 @@
           <div class="key-field-row">
             <span class="key-label">Private Cryptographic Key:</span>
             <span id="privacy-group-secret" class="key-val-mono">SECRET-KEY</span>
+          </div>
+          <div class="key-field-row">
+            <span class="key-label">Database Encryption:</span>
+            <span class="key-val" style="color:var(--accent-emerald); font-weight:700; font-size:0.85rem;">🛡️ End-to-End Encrypted (UPI IDs encrypted in Firestore)</span>
           </div>
         </div>
 

@@ -2870,3 +2870,57 @@ button, input, select, textarea {
   }
 }
 
+/* ================= Real-Time Cloud Sync Badge ================= */
+.cloud-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-emerald);
+  letter-spacing: 0.03em;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.cloud-sync-badge .sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+  animation: pulse-sync-dot 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-sync-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.cloud-sync-badge.syncing {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--accent-amber);
+}
+
+.cloud-sync-badge.syncing .sync-dot {
+  background: var(--accent-amber);
+  box-shadow: 0 0 8px var(--accent-amber);
+}
+
+.cloud-sync-badge.offline {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+}
+
+.cloud-sync-badge.offline .sync-dot {
+  background: #94a3b8;
+  box-shadow: none;
+  animation: none;
+}
+

@@ -46,6 +46,152 @@
     'Other': '#64748B'
   };
 
+  // --- Firebase Real-Time Cloud Sync Configuration ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyB_Hs5jJnlWLCceIE33jcM38EW1qQNEFA4",
+    authDomain: "quicksplit-app-e9716.firebaseapp.com",
+    projectId: "quicksplit-app-e9716",
+    storageBucket: "quicksplit-app-e9716.firebasestorage.app",
+    messagingSenderId: "1075142986821",
+    appId: "1:1075142986821:web:cb2f043dbfa7db4fdda72c"
+  };
+
+  let firestoreDb = null;
+  let unsubscribeLiveSync = null;
+  let isReceivingCloudUpdate = false;
+  let activeListeningGroupId = null;
+
+  function initFirebase() {
+    try {
+      if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+        if (!firebase.apps || !firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        firestoreDb = firebase.firestore();
+        updateSyncStatusUI('synced');
+      } else {
+        updateSyncStatusUI('offline');
+      }
+    } catch (err) {
+      console.warn('Firebase init:', err);
+      updateSyncStatusUI('offline');
+    }
+  }
+
+  function updateSyncStatusUI(status) {
+    const badge = document.getElementById('cloud-sync-badge');
+    const text = document.getElementById('cloud-sync-text');
+    if (!badge || !text) return;
+    badge.className = 'cloud-sync-badge ' + (status || 'synced');
+    if (status === 'syncing') {
+      text.textContent = 'Syncing…';
+    } else if (status === 'offline') {
+      text.textContent = 'Offline';
+    } else {
+      text.textContent = 'Live Sync';
+    }
+  }
+
+  function syncGroupToCloud(group) {
+    if (!firestoreDb || !group || !group.id || isReceivingCloudUpdate) return;
+    try {
+      updateSyncStatusUI('syncing');
+      const payload = {
+        id: group.id,
+        name: group.name || 'Group',
+        currency: group.currency || '₹',
+        category: group.category || 'Other',
+        description: group.description || group.desc || '',
+        secretKey: group.secretKey || '',
+        members: group.members || [],
+        expenses: group.expenses || [],
+        settlements: group.settlements || [],
+        updatedAt: Date.now()
+      };
+
+      firestoreDb.collection('groups').doc(group.id).set(payload, { merge: true })
+        .then(() => {
+          updateSyncStatusUI('synced');
+        })
+        .catch(err => {
+          console.warn('Firestore cloud sync warning:', err);
+          updateSyncStatusUI('offline');
+        });
+    } catch (e) {
+      console.warn('syncGroupToCloud error:', e);
+    }
+  }
+
+  function listenToGroupCloudSync(groupId) {
+    if (!firestoreDb || !groupId) return;
+    if (activeListeningGroupId === groupId && unsubscribeLiveSync) return;
+
+    if (unsubscribeLiveSync) {
+      unsubscribeLiveSync();
+      unsubscribeLiveSync = null;
+    }
+    activeListeningGroupId = groupId;
+
+    try {
+      unsubscribeLiveSync = firestoreDb.collection('groups').doc(groupId).onSnapshot(doc => {
+        if (!doc.exists) {
+          // If group not yet in cloud, upload local group
+          const local = state.groups.find(g => g.id === groupId);
+          if (local) syncGroupToCloud(local);
+          return;
+        }
+
+        const cloud = doc.data();
+        if (!cloud || !cloud.id) return;
+
+        const existsIdx = state.groups.findIndex(g => g.id === groupId);
+        if (existsIdx !== -1) {
+          const current = state.groups[existsIdx];
+          const cloudTime = cloud.updatedAt || 0;
+          const localTime = current._updatedAt || 0;
+          const cloudExpCount = (cloud.expenses || []).length;
+          const localExpCount = (current.expenses || []).length;
+          const cloudStlCount = (cloud.settlements || []).length;
+          const localStlCount = (current.settlements || []).length;
+
+          if (cloudTime > localTime || cloudExpCount !== localExpCount || cloudStlCount !== localStlCount) {
+            isReceivingCloudUpdate = true;
+            state.groups[existsIdx] = {
+              ...current,
+              members: cloud.members || current.members,
+              expenses: cloud.expenses || current.expenses,
+              settlements: cloud.settlements || current.settlements,
+              name: cloud.name || current.name,
+              currency: cloud.currency || current.currency,
+              _updatedAt: cloudTime || Date.now()
+            };
+            saveLocalStateOnly();
+            renderAll();
+            isReceivingCloudUpdate = false;
+            updateSyncStatusUI('synced');
+          }
+        } else {
+          // New group received from cloud
+          isReceivingCloudUpdate = true;
+          state.groups.unshift({
+            ...cloud,
+            _updatedAt: cloud.updatedAt || Date.now()
+          });
+          state.activeGroupId = cloud.id;
+          saveLocalStateOnly();
+          renderAll();
+          isReceivingCloudUpdate = false;
+          updateSyncStatusUI('synced');
+        }
+      }, err => {
+        console.warn('Live sync listener:', err);
+        updateSyncStatusUI('offline');
+      });
+    } catch (e) {
+      console.warn('listenToGroupCloudSync error:', e);
+    }
+  }
+
   // --- Storage Key ---
   const STORAGE_KEY = 'letssplit_india_v2';
 
@@ -124,7 +270,7 @@
     saveState();
   }
 
-  function saveState() {
+  function saveLocalStateOnly() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         groups: state.groups,
@@ -132,7 +278,16 @@
         theme: state.theme
       }));
     } catch (e) {
-      console.error('Failed to save state:', e);
+      console.error('Failed to save local state:', e);
+    }
+  }
+
+  function saveState() {
+    saveLocalStateOnly();
+    const active = getActiveGroup();
+    if (active) {
+      active._updatedAt = Date.now();
+      syncGroupToCloud(active);
     }
   }
 
@@ -312,6 +467,9 @@
     renderBalancesTab(group);
     renderInsightsTab(group);
     renderHistoryTab(group);
+
+    // Keep active group connected to real-time cloud sync
+    listenToGroupCloudSync(group.id);
   }
 
   function renderHeaderAndHero(group) {
@@ -2007,8 +2165,15 @@
           .filter(s => s[0] >= 0 && s[1] >= 0)
       };
 
-      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
+      // Ensure group is saved to cloud before building link
+      syncGroupToCloud(group);
+
       const baseUrl = window.location.href.split('#')[0];
+      if (firestoreDb && group && group.id) {
+        return `${baseUrl}#group=${group.id}`;
+      }
+
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
       return `${baseUrl}#import=${payload}`;
     } catch (e) {
       console.error('buildGroupSyncLink error:', e);
@@ -2017,9 +2182,48 @@
   }
 
   function checkUrlImport() {
-    // Check if URL contains an import payload (when teammate scans QR)
+    // Check if URL contains a cloud group ID or import payload (when teammate scans QR or opens link)
     try {
       const hash = window.location.hash;
+      if (!hash) return;
+
+      // 1. Live Cloud Group Link (#group=g_...)
+      if (hash.startsWith('#group=')) {
+        const groupId = hash.substring('#group='.length);
+        if (groupId) {
+          showToast('⏳ Connecting to live cloud group…', 'info');
+          const checkAndLoad = () => {
+            if (firestoreDb) {
+              firestoreDb.collection('groups').doc(groupId).get().then(doc => {
+                if (doc.exists) {
+                  const cloud = doc.data();
+                  const existsIdx = state.groups.findIndex(g => g.id === groupId);
+                  if (existsIdx !== -1) {
+                    state.groups[existsIdx] = { ...state.groups[existsIdx], ...cloud };
+                  } else {
+                    state.groups.unshift(cloud);
+                  }
+                  state.activeGroupId = groupId;
+                  saveLocalStateOnly();
+                  renderAll();
+                  showToast(`✅ Connected to "${cloud.name}" via Live Cloud Sync!`, 'success');
+                  history.replaceState(null, '', window.location.pathname);
+                } else {
+                  showToast('Group not found in cloud.', 'warning');
+                }
+              }).catch(err => {
+                console.warn('Cloud group load error:', err);
+              });
+            } else {
+              setTimeout(checkAndLoad, 200);
+            }
+          };
+          checkAndLoad();
+        }
+        return;
+      }
+
+      // 2. Offline Import Payload Fallback (#import=...)
       if (!hash.startsWith('#import=')) return;
 
       const payload = hash.substring('#import='.length);
@@ -2613,6 +2817,7 @@
 
   // --- Initialize on DOM Ready ---
   document.addEventListener('DOMContentLoaded', () => {
+    initFirebase();
     loadState();
     initEvents();
     renderAll();

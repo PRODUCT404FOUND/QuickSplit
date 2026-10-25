@@ -80,6 +80,12 @@
           <span class="btn-text">Add Expense</span>
         </button>
 
+        <!-- Live Cloud Sync Status Indicator -->
+        <div id="cloud-sync-badge" class="cloud-sync-badge" title="Firebase Real-Time Cloud Sync Active">
+          <span class="sync-dot"></span>
+          <span class="sync-text" id="cloud-sync-text">Live Sync</span>
+        </div>
+
         <!-- Theme Toggle -->
         <button id="theme-toggle-btn" class="icon-round-btn glass-btn" aria-label="Toggle Theme"
           title="Toggle Dark/Light Mode">
@@ -938,6 +944,10 @@
 
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- Firebase Real-Time Cloud SDKs (Google CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 
   <!-- QR Code Generator Library (Offline, Zero-Tracker, Instant Client-Side) -->
   <script src="qrcode.min.js"></script>

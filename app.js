@@ -1217,10 +1217,10 @@
 
     if (receiver.upiId) {
       upiBox.classList.remove('hidden');
-      upiBtn.href = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&am=${amt}&cu=INR&tn=${encodeURIComponent(`Let'sSplit payment`)}`;
+      upiBtn.href = `upi://pay?pa=${receiver.upiId.trim()}&pn=${encodeURIComponent(receiver.name)}&cu=INR&tn=${encodeURIComponent(`QuickSplit payment`)}`;
     } else {
       upiBox.classList.remove('hidden');
-      upiBtn.href = `upi://pay?pn=${encodeURIComponent(receiver.name)}&am=${amt}&cu=INR&tn=${encodeURIComponent(`Let'sSplit payment`)}`;
+      upiBtn.href = `upi://pay?pn=${encodeURIComponent(receiver.name)}&cu=INR&tn=${encodeURIComponent(`QuickSplit payment`)}`;
     }
   }
 
@@ -1583,16 +1583,15 @@
   }
 
   // Build platform-accurate UPI deep links (Android intents + iOS URL schemes)
-  // Crucial: pa must contain literal '@', NEVER '%40', or UPI apps reject the VPA pattern
-  function buildAppUpiUrl(appKey, upiId, name, amount) {
+  // Loads receiver's UPI ID and name — NO preloaded amount so payer can enter any amount freely
+  function buildAppUpiUrl(appKey, upiId, name) {
     const isAndroid = /android/i.test(navigator.userAgent || '');
     const cleanUpi = (upiId || '').trim();
     const cleanName = encodeURIComponent((name || '').trim());
-    const amtStr = amount > 0 ? `&am=${Number(amount).toFixed(2)}` : '';
     const note = encodeURIComponent('QuickSplit payment');
 
-    // Standard query: pa MUST have literal '@'
-    const upiQuery = `pa=${cleanUpi}&pn=${cleanName}${amtStr}&cu=INR&tn=${note}`;
+    // Standard query: pa MUST have literal '@' and NO fixed amount (&am= omitted)
+    const upiQuery = `pa=${cleanUpi}&pn=${cleanName}&cu=INR&tn=${note}`;
 
     if (isAndroid) {
       const pkgMap = {
@@ -1691,11 +1690,11 @@
     // Generate pure QR code without fixed amount (just receiver's UPI ID)
     generateUpiQrCode(receiver);
 
-    // Wire up UPI App buttons with accurate deep-links and copy fallbacks
+    // Wire up UPI App buttons with accurate deep-links and copy fallbacks (NO preloaded amount)
     document.querySelectorAll('.upi-app-btn').forEach(btn => {
       const appKey = btn.dataset.upiApp;
       if (receiver.upiId) {
-        const targetUrl = buildAppUpiUrl(appKey, receiver.upiId, receiver.name, amount);
+        const targetUrl = buildAppUpiUrl(appKey, receiver.upiId, receiver.name);
         btn.setAttribute('href', targetUrl);
       } else {
         btn.removeAttribute('href');
@@ -1726,8 +1725,8 @@
         // 2. Notify user
         showToast(`📋 Copied UPI ID (${cleanUpi})! Opening ${appName}...`, 'success');
 
-        // 3. Fallback navigation trigger
-        const targetUrl = buildAppUpiUrl(appKey, cleanUpi, receiver.name, amount);
+        // 3. Fallback navigation trigger (NO fixed amount preloaded)
+        const targetUrl = buildAppUpiUrl(appKey, cleanUpi, receiver.name);
         setTimeout(() => {
           window.location.href = targetUrl;
         }, 80);
@@ -1851,10 +1850,10 @@
       const inlineEditor = document.getElementById('qr-inline-upi-editor');
       if (inlineEditor) inlineEditor.classList.add('hidden');
 
-      // Update app button links
+      // Update app button links (NO fixed amount)
       document.querySelectorAll('.upi-app-btn').forEach(btn => {
         const appKey = btn.dataset.upiApp;
-        btn.setAttribute('href', buildAppUpiUrl(appKey, newUpi, member.name, _qrCurrentAmount));
+        btn.setAttribute('href', buildAppUpiUrl(appKey, newUpi, member.name));
       });
 
       generateUpiQrCode(member);

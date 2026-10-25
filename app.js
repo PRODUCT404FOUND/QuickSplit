@@ -1553,7 +1553,6 @@
   let _qrCurrentPayerId = null;
   let _qrCurrentReceiverId = null;
   let _qrCurrentAmount = 0;
-  let _qrLockAmount = false;
 
   function copyToClipboardText(text, successToast = null) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1583,15 +1582,50 @@
     } catch (_) {}
   }
 
-  function updateQrAmountHintText(isLocked, amount, currency) {
-    const hint = document.getElementById('qr-amount-hint');
-    const instruction = document.getElementById('qr-instruction-text');
-    if (isLocked) {
-      if (hint) hint.innerHTML = `🔒 <strong>Amount locked in QR:</strong> ${formatMoney(amount, currency)}`;
-      if (instruction) instruction.textContent = `📷 Scan to Pay ${formatMoney(amount, currency)}`;
-    } else {
-      if (hint) hint.innerHTML = `✨ <strong>Unlocked:</strong> Scan & enter amount freely in app (avoids bank rejection)`;
-      if (instruction) instruction.textContent = `📷 Scan with any Indian UPI App`;
+  // Build platform-accurate UPI deep links (Android intents + iOS URL schemes)
+  // Crucial: pa must contain literal '@', NEVER '%40', or UPI apps reject the VPA pattern
+  function buildAppUpiUrl(appKey, upiId, name, amount) {
+    const isAndroid = /android/i.test(navigator.userAgent || '');
+    const cleanUpi = (upiId || '').trim();
+    const cleanName = encodeURIComponent((name || '').trim());
+    const amtStr = amount > 0 ? `&am=${Number(amount).toFixed(2)}` : '';
+    const note = encodeURIComponent('QuickSplit payment');
+
+    // Standard query: pa MUST have literal '@'
+    const upiQuery = `pa=${cleanUpi}&pn=${cleanName}${amtStr}&cu=INR&tn=${note}`;
+
+    if (isAndroid) {
+      const pkgMap = {
+        gpay: 'com.google.android.apps.nbu.paisa.user',
+        phonepe: 'com.phonepe.app',
+        paytm: 'net.one97.paytm',
+        bhim: 'in.org.npci.upiapp',
+        cred: 'com.dreamplug.androidapp'
+      };
+      if (pkgMap[appKey]) {
+        return `intent://pay?${upiQuery}#Intent;scheme=upi;package=${pkgMap[appKey]};end`;
+      }
+      return `upi://pay?${upiQuery}`;
+    }
+
+    // iOS and desktop schemes
+    switch (appKey) {
+      case 'gpay':
+        // Google Pay on iOS registers gpay://upi/pay and tez://upi/pay
+        return `gpay://upi/pay?${upiQuery}`;
+      case 'phonepe':
+        // PhonePe on iOS
+        return `phonepe://upi/pay?${upiQuery}`;
+      case 'paytm':
+        // Paytm on iOS
+        return `paytmmp://pay?${upiQuery}`;
+      case 'bhim':
+        return `bhim://pay?${upiQuery}`;
+      case 'cred':
+        return `cred://pay?${upiQuery}`;
+      case 'generic':
+      default:
+        return `upi://pay?${upiQuery}`;
     }
   }
 
@@ -1602,7 +1636,6 @@
     _qrCurrentPayerId = payerId;
     _qrCurrentReceiverId = receiverId;
     _qrCurrentAmount = amount;
-    _qrLockAmount = false; // default: UNLOCKED (just the QR code not the fixed amount!)
 
     const payer = getMember(group, payerId);
     const receiver = getMember(group, receiverId);
@@ -1619,7 +1652,7 @@
     const inlineEditor = document.getElementById('qr-inline-upi-editor');
 
     if (receiver.upiId) {
-      upiText.textContent = receiver.upiId;
+      upiText.textContent = receiver.upiId.trim();
       if (upiCard) upiCard.classList.remove('hidden');
       if (inlineEditor) inlineEditor.classList.add('hidden');
     } else {
@@ -1637,7 +1670,7 @@
           showToast('No UPI ID added for receiver yet.', 'warning');
           return;
         }
-        copyToClipboardText(receiver.upiId, `📋 UPI ID copied: ${receiver.upiId}`);
+        copyToClipboardText(receiver.upiId.trim(), `📋 UPI ID copied: ${receiver.upiId.trim()}`);
       };
     }
 
@@ -1655,26 +1688,49 @@
       };
     }
 
-    // Amount lock toggle checkbox
-    const toggleAmount = document.getElementById('qr-toggle-include-amount');
-    if (toggleAmount) {
-      toggleAmount.checked = _qrLockAmount;
-      updateQrAmountHintText(_qrLockAmount, amount, currency);
+    // Generate pure QR code without fixed amount (just receiver's UPI ID)
+    generateUpiQrCode(receiver);
 
-      toggleAmount.onchange = (e) => {
-        _qrLockAmount = e.target.checked;
-        updateQrAmountHintText(_qrLockAmount, _qrCurrentAmount, currency);
-        generateUpiQrCode(receiver, _qrCurrentAmount, _qrLockAmount);
-      };
-    }
-
-    // Generate QR code (unlocked / no fixed amount by default)
-    generateUpiQrCode(receiver, amount, _qrLockAmount);
-
-    // Wire up UPI App Selector buttons
+    // Wire up UPI App buttons with accurate deep-links and copy fallbacks
     document.querySelectorAll('.upi-app-btn').forEach(btn => {
-      btn.onclick = () => {
-        handleOpenSpecificUpiApp(btn.dataset.upiApp, payer, receiver, amount);
+      const appKey = btn.dataset.upiApp;
+      if (receiver.upiId) {
+        const targetUrl = buildAppUpiUrl(appKey, receiver.upiId, receiver.name, amount);
+        btn.setAttribute('href', targetUrl);
+      } else {
+        btn.removeAttribute('href');
+      }
+
+      btn.onclick = (e) => {
+        if (!receiver.upiId) {
+          e.preventDefault();
+          showToast('⚠️ Please enter receiver’s UPI ID first!', 'warning');
+          if (inlineEditor) inlineEditor.classList.remove('hidden');
+          return;
+        }
+
+        const cleanUpi = receiver.upiId.trim();
+        const appNames = {
+          gpay: 'Google Pay',
+          phonepe: 'PhonePe',
+          paytm: 'Paytm',
+          bhim: 'BHIM',
+          cred: 'CRED',
+          generic: 'UPI App'
+        };
+        const appName = appNames[appKey] || 'UPI App';
+
+        // 1. Copy receiver's clean UPI ID to clipboard
+        copyToClipboardText(cleanUpi);
+
+        // 2. Notify user
+        showToast(`📋 Copied UPI ID (${cleanUpi})! Opening ${appName}...`, 'success');
+
+        // 3. Fallback navigation trigger
+        const targetUrl = buildAppUpiUrl(appKey, cleanUpi, receiver.name, amount);
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 80);
       };
     });
 
@@ -1685,57 +1741,6 @@
     };
 
     openModal('modal-upi-qr');
-  }
-
-  function handleOpenSpecificUpiApp(appKey, payer, receiver, amount) {
-    if (!receiver.upiId) {
-      showToast('⚠️ Please enter the receiver’s UPI ID first!', 'warning');
-      const inlineEditor = document.getElementById('qr-inline-upi-editor');
-      if (inlineEditor) inlineEditor.classList.remove('hidden');
-      return;
-    }
-
-    const note = encodeURIComponent(`QuickSplit payment from ${payer.name}`);
-    const amtStr = amount > 0 ? `&am=${amount.toFixed(2)}` : '';
-    const pa = encodeURIComponent(receiver.upiId);
-    const pn = encodeURIComponent(receiver.name);
-
-    // Always copy UPI ID to clipboard as a helpful fallback
-    copyToClipboardText(receiver.upiId);
-
-    let deepLink = '';
-    let appName = 'UPI App';
-
-    switch (appKey) {
-      case 'gpay':
-        appName = 'Google Pay';
-        deepLink = `tez://upi/pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-      case 'phonepe':
-        appName = 'PhonePe';
-        deepLink = `phonepe://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-      case 'paytm':
-        appName = 'Paytm';
-        deepLink = `paytmmp://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-      case 'bhim':
-        appName = 'BHIM';
-        deepLink = `bhim://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-      case 'cred':
-        appName = 'CRED';
-        deepLink = `cred://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-      case 'generic':
-      default:
-        appName = 'UPI App';
-        deepLink = `upi://pay?pa=${pa}&pn=${pn}${amtStr}&cu=INR&tn=${note}`;
-        break;
-    }
-
-    showToast(`📋 Copied UPI ID: ${receiver.upiId}! Opening ${appName}...`, 'success');
-    window.location.href = deepLink;
   }
 
   // --- Universal Client-Side & Resilient QR Code Generator ---
@@ -1796,7 +1801,7 @@
     }
   }
 
-  function generateUpiQrCode(receiver, amount, lockAmount = false) {
+  function generateUpiQrCode(receiver) {
     const qrContainer = document.getElementById('upi-qr-code-wrapper');
     const qrImg = document.getElementById('upi-qr-image');
     const qrPlaceholder = document.getElementById('upi-qr-placeholder');
@@ -1814,12 +1819,10 @@
 
     if (qrPlaceholder) qrPlaceholder.classList.add('hidden');
 
-    // Build the UPI payment string:
-    // If lockAmount is false (default), omit &am= so it's "just the qr code not the fixed amount in it"
-    let upiString = `upi://pay?pa=${encodeURIComponent(receiver.upiId)}&pn=${encodeURIComponent(receiver.name)}&cu=INR`;
-    if (lockAmount && amount > 0) {
-      upiString += `&am=${amount.toFixed(2)}&tn=${encodeURIComponent('QuickSplit Payment')}`;
-    }
+    // Pure QR code with receiver's UPI ID and name — NO fixed amount locked into it!
+    const cleanUpi = receiver.upiId.trim();
+    const cleanName = encodeURIComponent(receiver.name.trim());
+    const upiString = `upi://pay?pa=${cleanUpi}&pn=${cleanName}&cu=INR`;
 
     // Render client-side QR with fallback
     renderQrCode('upi-qr-code-wrapper', 'upi-qr-image', upiString, 210);
@@ -1848,7 +1851,13 @@
       const inlineEditor = document.getElementById('qr-inline-upi-editor');
       if (inlineEditor) inlineEditor.classList.add('hidden');
 
-      generateUpiQrCode(member, _qrCurrentAmount, _qrLockAmount);
+      // Update app button links
+      document.querySelectorAll('.upi-app-btn').forEach(btn => {
+        const appKey = btn.dataset.upiApp;
+        btn.setAttribute('href', buildAppUpiUrl(appKey, newUpi, member.name, _qrCurrentAmount));
+      });
+
+      generateUpiQrCode(member);
       renderAll();
       showToast(`UPI ID saved for ${member.name}!`, 'success');
     }

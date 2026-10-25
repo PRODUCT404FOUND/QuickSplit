@@ -2403,43 +2403,7 @@ button, input, select, textarea {
   background: rgba(16, 185, 129, 0.15) !important;
 }
 
-/* QR Amount Lock Toggle Option */
-.qr-amount-option-box {
-  width: 100%;
-  padding: 0.65rem 0.9rem;
-  border: 1px dashed var(--border-subtle);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  text-align: left;
-  background: rgba(255, 255, 255, 0.02);
-}
 
-.qr-checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  user-select: none;
-}
-
-.qr-checkbox-label input[type="checkbox"] {
-  accent-color: var(--accent-emerald);
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.qr-hint-text {
-  font-size: 0.74rem;
-  color: var(--accent-emerald);
-  font-weight: 500;
-  line-height: 1.35;
-}
 
 /* Interactive UPI App Selector */
 .upi-app-selector-section {

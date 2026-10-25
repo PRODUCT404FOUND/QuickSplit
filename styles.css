@@ -2432,6 +2432,22 @@ button, input, select, textarea {
   gap: 0.5rem;
 }
 
+.sync-snapshot-notice {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.78rem;
+  color: var(--accent-amber);
+  text-align: left;
+  line-height: 1.5;
+  width: 100%;
+}
+
+.sync-snapshot-notice strong {
+  color: #F9C54A;
+}
+
 .sync-qr-wrapper {
   background: #FFFFFF;
   padding: 16px;
@@ -2634,11 +2650,13 @@ button, input, select, textarea {
   }
 
   .transfer-actions-row .btn-upi-pay,
-  .transfer-actions-row .btn-clear-money {
+  .transfer-actions-row [data-banner-clear-payer] {
     flex: 1;
     justify-content: center;
-    padding: 0.5rem 0.4rem;
-    font-size: 0.78rem;
+    text-align: center;
+    padding: 0.55rem 0.4rem;
+    font-size: 0.8rem;
+    min-width: 0;
   }
 
   .balances-who-owes-list {

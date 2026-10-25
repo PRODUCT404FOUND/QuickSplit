@@ -1726,20 +1726,36 @@
         n: group.name,
         c: group.category || 'Other',
         u: group.currency || 'INR',
-        d: group.description || '',
+        d: (group.description || '').substring(0, 60),
         k: group.secretKey || '',
         m: (group.members || []).map(m => [m.id, m.name, m.upiId || '']),
-        // e[0]=id, e[1]=title, e[2]=amount, e[3]=payers[[memberId,amount],...], e[4]=splits[[memberId,amount],...], e[5]=date, e[6]=category
-        e: (group.expenses || []).map(e => [
-          e.id,
-          e.title || e.description || '',
-          Number(e.amount),
-          (e.payers || []).map(p => [p.memberId, Number(p.amount)]),
-          (e.splits || []).map(s => [s.memberId, Number(s.amount)]),
-          e.date || '',
-          e.category || 'Other'
-        ]),
-        s: (group.settlements || []).map(s => [s.fromId, s.toId, Number(s.amount), s.date || ''])
+        // e[0]=id, e[1]=title, e[2]=amount,
+        // e[3]=payers as [[memberId,amount],...] for multi-payer OR string memberId for single,
+        // e[4]=splits as [memberId,...] (amounts recalculated equally on decode),
+        // e[5]=date, e[6]=category
+        e: (group.expenses || []).map(e => {
+          // Payers: compact representation
+          let payersData;
+          if (e.payers && e.payers.length > 1) {
+            payersData = e.payers.map(p => [p.memberId, Math.round(p.amount * 100) / 100]);
+          } else if (e.payers && e.payers.length === 1) {
+            payersData = e.payers[0].memberId; // single string saves space
+          } else {
+            payersData = e.payerId || e.paidBy || '';
+          }
+          // Splits: just member IDs (amounts recalculated on decode)
+          const splitIds = (e.splits || []).map(s => s.memberId);
+          return [
+            e.id,
+            (e.title || e.description || '').substring(0, 40),
+            Math.round(Number(e.amount) * 100) / 100,
+            payersData,
+            splitIds,
+            e.date || '',
+            e.category || 'Other'
+          ];
+        }),
+        s: (group.settlements || []).map(s => [s.fromId, s.toId, Math.round(Number(s.amount) * 100) / 100, s.date || ''])
       };
 
       const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
@@ -1778,24 +1794,38 @@
             color: AVATAR_COLORS[idx % AVATAR_COLORS.length]
           })),
           expenses: (rawData.e || []).map(e => {
+            const totalAmt = Number(e[2]) || 0;
             if (isV3) {
-              // v3: e[3]=payers[[memberId,amount],...], e[4]=splits[[memberId,amount],...]
+              // v3: e[3] = string memberId (single payer) OR [[memberId,amount],...] (multi)
+              //     e[4] = [memberId,...] (split member IDs, recalculate amounts equally)
+              const rawPayers = e[3];
+              let payers;
+              if (Array.isArray(rawPayers)) {
+                // Multi-payer: [[memberId, amount], ...]
+                payers = rawPayers.map(p => ({ memberId: p[0], amount: Number(p[1]) || 0 }));
+              } else {
+                // Single payer: just a memberId string
+                payers = rawPayers ? [{ memberId: rawPayers, amount: totalAmt }] : [];
+              }
+              const splitIds = e[4] || [];
+              const perPerson = splitIds.length > 0 ? Math.round((totalAmt / splitIds.length) * 100) / 100 : 0;
+              const splits = splitIds.map(mId => ({ memberId: mId, amount: perPerson }));
               return {
                 id: e[0],
                 title: e[1] || '',
-                amount: Number(e[2]) || 0,
-                payers: (e[3] || []).map(p => ({ memberId: p[0], amount: Number(p[1]) || 0 })),
-                splits: (e[4] || []).map(s => ({ memberId: s[0], amount: Number(s[1]) || 0 })),
+                amount: totalAmt,
+                payers,
+                splits,
                 date: e[5] || new Date().toISOString().split('T')[0],
                 category: e[6] || 'Other',
                 createdAt: Date.now()
               };
             } else {
-              // v2 legacy: e[3]=paidBy memberId, e[4]=splitBetween [memberIds]
+              // v2 legacy: e[3]=paidBy memberId string, e[4]=splitBetween [memberIds]
               return {
                 id: e[0],
                 title: e[1] || '',
-                amount: Number(e[2]) || 0,
+                amount: totalAmt,
                 paidBy: e[3],
                 splitBetween: e[4] || [],
                 date: e[5] || new Date().toISOString().split('T')[0],
@@ -2204,12 +2234,18 @@
     document.getElementById('btn-copy-wa-text').onclick = copyWhatsAppToClipboard;
     document.getElementById('btn-export-csv').onclick = exportToCSV;
 
-    // 15. Settlement banner: delegated UPI QR button clicks
+    // 15. Settlement banner: delegated clicks (UPI QR + Clear Money)
     document.getElementById('banner-transfers-list').addEventListener('click', (e) => {
       const qrBtn = e.target.closest('[data-banner-qr-payer]');
       if (qrBtn) {
         e.stopPropagation();
         openUpiQrModal(qrBtn.dataset.bannerQrPayer, qrBtn.dataset.bannerQrReceiver, parseFloat(qrBtn.dataset.bannerQrAmt));
+        return;
+      }
+      const clearBtn = e.target.closest('[data-banner-clear-payer]');
+      if (clearBtn) {
+        e.stopPropagation();
+        openSettleModal(clearBtn.dataset.bannerClearPayer, clearBtn.dataset.bannerClearReceiver, parseFloat(clearBtn.dataset.bannerClearAmt));
       }
     });
 

@@ -1796,7 +1796,11 @@
           } else {
             p = gi(e.payerId || e.paidBy || '');
           }
-          const si = (e.splits || []).map(s => gi(s.memberId)).filter(i => i >= 0);
+          // Splits: support both new `splits` array and legacy `splitBetween` string array
+          const splitSources = (e.splits && e.splits.length > 0)
+            ? e.splits.map(s => s.memberId)
+            : (e.splitBetween || []);
+          const si = splitSources.map(id => gi(id)).filter(i => i >= 0);
           return [
             (e.title || e.description || '').substring(0, 25),
             Math.round(Number(e.amount) * 100) / 100,
